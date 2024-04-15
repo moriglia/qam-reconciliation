@@ -4,7 +4,7 @@ import pandas as pd
 from galois import GF2
 import numpy as np
 
-class TestDecoder(unittest.TestCase):
+class TestDecoderConstruction(unittest.TestCase):
     def setUp(self):
         df = pd.DataFrame({'eid' : [4, *range(4)],
                            'cid' : [2, 0, 0, 1, 1],
@@ -152,26 +152,35 @@ class TestDecoderProcessing(unittest.TestCase):
     def test_process_var_node(self):
         check_to_var, var_to_check = self.make_message_arrays()
         lappr_data = np.random.randn(self.uut.vnum)
+        updated_lappr = np.empty_like(lappr_data)
 
         # Check node of degree 3
-        self.uut.process_var_node(1, lappr_data, check_to_var, var_to_check)
+        self.uut.process_var_node(1, lappr_data, check_to_var, var_to_check, updated_lappr)
         self.assertEqual(var_to_check[1],
                          check_to_var[3] + check_to_var[5] + lappr_data[1])
         self.assertEqual(var_to_check[3],
                          check_to_var[1] + check_to_var[5] + lappr_data[1])
         self.assertEqual(var_to_check[5],
                          check_to_var[1] + check_to_var[3] + lappr_data[1])
+        self.assertAlmostEqual(updated_lappr[1],
+                               check_to_var[1] + check_to_var[3] + check_to_var[5] + lappr_data[1],
+                               delta = np.abs(updated_lappr[1])/1e6)
 
         # Check node of degree 1
-        self.uut.process_var_node(2, lappr_data, check_to_var, var_to_check)
+        self.uut.process_var_node(2, lappr_data, check_to_var, var_to_check, updated_lappr)
         self.assertEqual(var_to_check[4], lappr_data[2])
+        self.assertAlmostEqual(updated_lappr[2], check_to_var[4] + lappr_data[2],
+                               delta = np.abs(updated_lappr[2])/1e6)
 
         # check node of degree 2
-        self.uut.process_var_node(3, lappr_data, check_to_var, var_to_check)
+        self.uut.process_var_node(3, lappr_data, check_to_var, var_to_check, updated_lappr)
         self.assertEqual(var_to_check[2],
                          check_to_var[6] + lappr_data[3])
         self.assertEqual(var_to_check[6],
                          check_to_var[2] + lappr_data[3])
+        self.assertAlmostEqual(updated_lappr[3],
+                               check_to_var[2] + check_to_var[6] + lappr_data[3],
+                               delta=np.abs(updated_lappr[3])/1e6)
 
         return
         
@@ -239,12 +248,12 @@ class TestDecoderDecoding(unittest.TestCase):
         return
 
     def test_decode_wrong_word_one_bit(self):
-        lappr = np.array([-0.1, -0.8, -1.3, 1.1, -0.4, 0.5, 0.1])
+        lappr = np.array([1.05, -1.075, -1.0, 1.1, -0.4, 0.4, -0.2])
         synd  = GF2([1, 1, 0])
 
         success, iter_count, updated_lappr = self.uut.decode(lappr, synd)
 
-        print(success, iter_count, updated_lappr)
+        # print(success, iter_count, updated_lappr)
         
         self.assertTrue(success)
         self.assertEqual(

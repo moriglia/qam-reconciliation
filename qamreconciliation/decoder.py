@@ -1,8 +1,9 @@
-from parfor import pmap
+# -*- mode: python; gud -*- 
+# from parfor import pmap
 import numpy as np
 import pandas as pd
 from galois import GF2
-from functools import reduce
+from functools import reduce, partial
 
 class Decoder():
     """ Decoder
@@ -53,80 +54,151 @@ class Decoder():
         return self.__edge_df
 
 
-    """ Syndrome checking functions """
-    
-    def check_synd_node(self, check_node_index:int, word:GF2, synd:GF2):
+    """ Syndrome checking functions """    
+    def __check_synd_node(self, check_node_index:int):
         index_set = np.array(self.edges.vid[self.edges.cid==check_node_index])
-        return word[index_set].sum() == synd[check_node_index]
+        return self.__word[index_set].sum() == self.__synd[check_node_index]
+
+
+    def check_synd_node(self, check_node_index:int, word:GF2, synd:GF2):
+        self.__word = word
+        self.__synd = synd
+
+        try:
+            return self.__check_synd_node(check_node_index)
+        finally:
+            del self.__word
+            del self.__synd
+
 
     
-    def check_word(self, word:GF2, synd:GF2):
-        return sum(pmap(self.check_synd_node,
-                        range(self.cnum),
-                        (word, synd))
+    def __check_word(self):
+        return sum(map(self.__check_synd_node,
+                       range(self.cnum))
                    ) == self.cnum
 
+
+    def check_word(self, word:GF2, synd:GF2):
+        self.__word = word
+        self.__synd = synd
+
+        try:
+            return self.__check_word()
+        finally:
+            del self.__word
+            del self.__synd
+
+            
     
     def check_lappr(self, lappr, synd:GF2):
-        return self.check_word(GF2((lappr<0).astype(int)),
-                               synd)
+        self.__word = GF2((lappr<0).astype(int))
+        self.__synd = synd
+
+        try:
+            return self.__check_word()
+        finally:
+            del self.__word
+            del self.__synd
     
 
     """ Message passing processing functions """
-    
-    def process_var_node(self, node_index, lappr_data, check_to_var, var_to_check):
+    def __process_var_node(self, node_index:int):
         index_set = np.array(self.edges.eid[self.edges.vid==node_index])
         for i in range(len(index_set)):
-            var_to_check[index_set[i]] = check_to_var[index_set[:i]].sum() + \
-                check_to_var[index_set[i+1:]].sum() + \
-                lappr_data[node_index]
-        return check_to_var[index_set].sum() + lappr_data[node_index]
+            self.__var_to_check[index_set[i]] = \
+                self.__check_to_var[index_set[   :i]].sum() + \
+                self.__check_to_var[index_set[i+1: ]].sum() + \
+                self.__lappr_data[node_index]
+        self.__updated_lappr[node_index] = \
+            self.__var_to_check[index_set[0]] + \
+            self.__check_to_var[index_set[0]]
+        return
 
 
-    def process_check_node(self, node_index, s, check_to_var, var_to_check):
+    def process_var_node(self, node_index, lappr_data, check_to_var:GF2, var_to_check:GF2, updated_lappr):
+        self.__lappr_data = lappr_data
+        self.__check_to_var = check_to_var
+        self.__var_to_check = var_to_check
+        self.__updated_lappr = updated_lappr
+        
+        try:
+            self.__process_var_node(node_index)
+        finally:
+            del self.__lappr_data
+            del self.__check_to_var
+            del self.__var_to_check
+            del self.__updated_lappr
+
+        return
+
+            
+    def __process_check_node(self, node_index):
         index_set = np.array(self.edges.eid[self.edges.cid==node_index])
-        prefactor = -2 if s[node_index] else 2
+        prefactor = -2 if self.__synd[node_index] else 2
         for i in range(len(index_set)):
-            check_to_var[index_set[i]] = prefactor*np.arctanh(
+            self.__check_to_var[index_set[i]] = prefactor*np.arctanh(
                 reduce(lambda x, y: x*y,
                        map(lambda x: np.tanh(0.5*x),
-                           [*np.array(var_to_check[index_set[   :i]]),
-                            *np.array(var_to_check[index_set[i+1: ]])]))
+                           [*np.array(self.__var_to_check[index_set[   :i]]),
+                            *np.array(self.__var_to_check[index_set[i+1: ]])]))
             )
 
         return
 
     
-    def decode(self, lappr_data, synd:GF2, max_iterations:int=20):
-        check_to_var = np.zeros(self.enum, dtype=np.double)
-        var_to_check = np.zeros(self.enum, dtype=np.double)
+    def process_check_node(self, node_index, synd, check_to_var, var_to_check):
+        self.__check_to_var = check_to_var
+        self.__var_to_check = var_to_check
+        self.__synd         = synd
 
+        try:
+            self.__process_check_node(node_index)
+        finally:
+            del self.__check_to_var 
+            del self.__var_to_check 
+            del self.__synd
+            
+        return
+    
+        
+    def decode(self, lappr_data, synd:GF2, max_iterations:int=20):    
         if (self.check_lappr(lappr_data, synd)):
             return (True, 0, lappr_data)
 
-        # Identical to updated_lappr[:] = lappr_data[:]
-        # But the messages for the checknodes have to be updated anyways
-        updated_lappr = np.array(pmap(self.process_var_node,
-                                      range(self.vnum),
-                                      (lappr_data,
-                                       check_to_var,
-                                       var_to_check)))
-    
-        for iter_index in range(max_iterations):
-            pmap(self.process_check_node,
-                 range(self.cnum),
-                 (synd, check_to_var, var_to_check))
+        self.__check_to_var  = np.zeros(self.enum, dtype=np.double)
+        self.__var_to_check  = np.empty_like(self.__check_to_var)
+        self.__updated_lappr = np.empty_like(lappr_data)
+        self.__lappr_data    = lappr_data
+        self.__synd          = synd
+        self.__word          = GF2.Zeros(self.vnum)
+        
+        try:
+            # First half iteration to propagate lapprs to check nodes
+            # The following line also initializes var_to_check
+            for v in range(self.vnum):
+                self.__process_var_node(v)
             
-            updated_lappr = np.array(pmap(self.process_var_node,
-                                          range(self.vnum),
-                                          (lappr_data,
-                                           check_to_var,
-                                           var_to_check)))
-            
-            if (self.check_lappr(updated_lappr, synd)):
-                return (True, iter_index+1, updated_lappr)
+            for iter_index in range(max_iterations):
+                for c in range(self.cnum):
+                    self.__process_check_node(c)
+                    
+                for v in range(self.vnum):
+                    self.__process_var_node(v)
 
-        return (False, max_iterations, updated_lappr)
+                self.__word[:] = GF2((self.__updated_lappr < 0).astype(int))
+                if (self.__check_word()):
+                    return (True, iter_index+1, self.__updated_lappr)
+
+            return (False, max_iterations, self.__updated_lappr)
+        
+        finally:
+            del self.__check_to_var 
+            del self.__var_to_check 
+            del self.__updated_lappr
+            del self.__lappr_data
+            del self.__synd
+            del self.__word
+            
 
         
 if __name__=="__main__":
