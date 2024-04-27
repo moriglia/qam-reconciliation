@@ -3,7 +3,7 @@
 import numpy as np
 import pandas as pd
 from galois import GF2
-from functools import reduce, partial
+from functools import reduce
 
 class Decoder():
     """ Decoder

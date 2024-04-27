@@ -1,4 +1,4 @@
-from qamreconciliation import decoder
+from qamreconciliation import Decoder
 import unittest
 import pandas as pd
 from galois import GF2
@@ -9,8 +9,8 @@ class TestDecoderConstruction(unittest.TestCase):
         df = pd.DataFrame({'eid' : [4, *range(4)],
                            'cid' : [2, 0, 0, 1, 1],
                            'vid' : [3, 0, 1, 1, 2]})
-        self.uut0 = decoder.Decoder(df)
-        self.uut1 = decoder.Decoder(df[:][1:], False)
+        self.uut0 = Decoder(df)
+        self.uut1 = Decoder(df[:][1:], False)
 
         self.synd0 = GF2([1, 1])
         self.word0 = GF2([[1, 0 ,1],
@@ -140,7 +140,7 @@ class TestDecoderProcessing(unittest.TestCase):
         df = pd.DataFrame({'eid' : [*range(8)],
                            'cid' : [0, 0, 0, 1, 1, 2, 2, 2],
                            'vid' : [0, 1, 3, 1, 2, 1, 3, 4]})
-        self.uut = decoder.Decoder(df, False)
+        self.uut = Decoder(df, False)
         return
 
     
@@ -225,7 +225,7 @@ class TestDecoderProcessing(unittest.TestCase):
 class TestDecoderDecoding(unittest.TestCase):
     def setUp(self):
         df = pd.read_csv("test/hamming_7-4.csv")
-        self.uut = decoder.Decoder(df)
+        self.uut = Decoder(df)
         return
 
 
