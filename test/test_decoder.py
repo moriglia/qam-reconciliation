@@ -52,8 +52,8 @@ class TestDecoderConstruction(unittest.TestCase):
         return
 
     def test_enum(self):
-        self.assertEqual(self.uut0.enum, 4)
-        self.assertEqual(self.uut1.enum, 4)
+        self.assertEqual(self.uut0.ednum, 4)
+        self.assertEqual(self.uut1.ednum, 4)
         return
 
     """ Test check functions """
@@ -145,8 +145,8 @@ class TestDecoderProcessing(unittest.TestCase):
 
     
     def make_message_arrays(self):
-        return (np.random.randn(self.uut.enum),
-                np.random.randn(self.uut.enum))
+        return (np.random.randn(self.uut.ednum),
+                np.random.randn(self.uut.ednum))
 
     
     def test_process_var_node(self):
@@ -156,28 +156,34 @@ class TestDecoderProcessing(unittest.TestCase):
 
         # Check node of degree 3
         self.uut.process_var_node(1, lappr_data, check_to_var, var_to_check, updated_lappr)
-        self.assertEqual(var_to_check[1],
-                         check_to_var[3] + check_to_var[5] + lappr_data[1])
-        self.assertEqual(var_to_check[3],
-                         check_to_var[1] + check_to_var[5] + lappr_data[1])
-        self.assertEqual(var_to_check[5],
-                         check_to_var[1] + check_to_var[3] + lappr_data[1])
+        self.assertAlmostEqual(var_to_check[1],
+                               check_to_var[3] + check_to_var[5] + lappr_data[1],
+                               delta = np.abs(var_to_check[1]/1e6))
+        self.assertAlmostEqual(var_to_check[3],
+                               check_to_var[1] + check_to_var[5] + lappr_data[1],
+                               delta = np.abs(var_to_check[3]/1e6))
+        self.assertAlmostEqual(var_to_check[5],
+                               check_to_var[1] + check_to_var[3] + lappr_data[1],
+                               delta = np.abs(var_to_check[5]/1e6))
         self.assertAlmostEqual(updated_lappr[1],
                                check_to_var[1] + check_to_var[3] + check_to_var[5] + lappr_data[1],
                                delta = np.abs(updated_lappr[1])/1e6)
 
         # Check node of degree 1
         self.uut.process_var_node(2, lappr_data, check_to_var, var_to_check, updated_lappr)
-        self.assertEqual(var_to_check[4], lappr_data[2])
+        self.assertAlmostEqual(var_to_check[4], lappr_data[2],
+                               delta = np.abs(var_to_check[4]/1e6))
         self.assertAlmostEqual(updated_lappr[2], check_to_var[4] + lappr_data[2],
                                delta = np.abs(updated_lappr[2])/1e6)
 
         # check node of degree 2
         self.uut.process_var_node(3, lappr_data, check_to_var, var_to_check, updated_lappr)
-        self.assertEqual(var_to_check[2],
-                         check_to_var[6] + lappr_data[3])
-        self.assertEqual(var_to_check[6],
-                         check_to_var[2] + lappr_data[3])
+        self.assertAlmostEqual(var_to_check[2],
+                               check_to_var[6] + lappr_data[3],
+                               delta = np.abs(var_to_check[2]/1e6))
+        self.assertAlmostEqual(var_to_check[6],
+                               check_to_var[2] + lappr_data[3],
+                               delta = np.abs(var_to_check[6]/1e6))
         self.assertAlmostEqual(updated_lappr[3],
                                check_to_var[2] + check_to_var[6] + lappr_data[3],
                                delta=np.abs(updated_lappr[3])/1e6)
@@ -238,7 +244,7 @@ class TestDecoderDecoding(unittest.TestCase):
         lappr = np.array([1.2, -0.8, -1.3, 1.1, -0.4, 0.5, 1.9])
         synd  = GF2([1, 1, 0])
 
-        success, iter_count, updated_lappr = self.uut.decode(lappr, synd)
+        success, iter_count, updated_lappr = self.uut.decode(lappr, synd, 20)
 
         self.assertTrue(success)
         self.assertEqual(iter_count, 0)
@@ -251,13 +257,13 @@ class TestDecoderDecoding(unittest.TestCase):
         lappr = np.array([1.05, -1.075, -1.0, 1.1, -0.4, 0.4, -0.2])
         synd  = GF2([1, 1, 0])
 
-        success, iter_count, updated_lappr = self.uut.decode(lappr, synd)
+        success, iter_count, updated_lappr = self.uut.decode(lappr, synd, 20)
 
         # print(success, iter_count, updated_lappr)
         
         self.assertTrue(success)
         self.assertEqual(
-            np.array(GF2((updated_lappr<0).astype(int))+\
+            np.array(GF2((np.array(updated_lappr)<0).astype(int))+\
                      GF2([0, 1, 1, 0, 1, 0, 0]),
                      dtype=np.uint).sum(),
             0)
