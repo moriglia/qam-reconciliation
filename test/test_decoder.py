@@ -4,13 +4,14 @@ import pandas as pd
 from galois import GF2
 import numpy as np
 
+
 class TestDecoderConstruction(unittest.TestCase):
     def setUp(self):
         df = pd.DataFrame({'eid' : [4, *range(4)],
                            'cid' : [2, 0, 0, 1, 1],
                            'vid' : [3, 0, 1, 1, 2]})
-        self.uut0 = Decoder(df)
-        self.uut1 = Decoder(df[:][1:], False)
+        self.uut0 = Decoder(df.vid[1:].to_numpy(), df.cid[1:].to_numpy())
+        # self.uut1 = Decoder(df[:][1:], False)
 
         self.synd0 = GF2([1, 1])
         self.word0 = GF2([[1, 0 ,1],
@@ -25,7 +26,7 @@ class TestDecoderConstruction(unittest.TestCase):
 
     def tearDown(self):
         del self.uut0
-        del self.uut1
+        # del self.uut1
         del self.synd0
         del self.synd1
         del self.word0
@@ -33,27 +34,20 @@ class TestDecoderConstruction(unittest.TestCase):
         return
 
     """ Test properties """
-    
-    @unittest.skip("DataFrame equality is ambiguous")
-    def test_edges(self):
-        self.assertEqual(self.uut0.edges,
-                         self.uut1.edges)
-        return
-
 
     def test_cnum(self):
         self.assertEqual(self.uut0.cnum, 2)
-        self.assertEqual(self.uut1.cnum, 2)
+        # self.assertEqual(self.uut1.cnum, 2)
         return
 
     def test_vnum(self):
         self.assertEqual(self.uut0.vnum, 3)
-        self.assertEqual(self.uut1.vnum, 3)
+        # self.assertEqual(self.uut1.vnum, 3)
         return
 
     def test_enum(self):
         self.assertEqual(self.uut0.ednum, 4)
-        self.assertEqual(self.uut1.ednum, 4)
+        # self.assertEqual(self.uut1.ednum, 4)
         return
 
     """ Test check functions """
@@ -61,62 +55,62 @@ class TestDecoderConstruction(unittest.TestCase):
     def test_check_synd_node(self):
         
         self.assertTrue (self.uut0.check_synd_node(0, self.word0[0], self.synd0))
-        self.assertTrue (self.uut1.check_synd_node(0, self.word0[0], self.synd0))
+        # self.assertTrue (self.uut1.check_synd_node(0, self.word0[0], self.synd0))
         self.assertTrue (self.uut0.check_synd_node(0, self.word0[1], self.synd0))
-        self.assertTrue (self.uut1.check_synd_node(0, self.word0[1], self.synd0))
+        # self.assertTrue (self.uut1.check_synd_node(0, self.word0[1], self.synd0))
         self.assertTrue (self.uut0.check_synd_node(0, self.word1[0], self.synd1))
-        self.assertTrue (self.uut1.check_synd_node(0, self.word1[0], self.synd1))
+        # self.assertTrue (self.uut1.check_synd_node(0, self.word1[0], self.synd1))
         self.assertTrue (self.uut0.check_synd_node(0, self.word1[1], self.synd1))
-        self.assertTrue (self.uut1.check_synd_node(0, self.word1[1], self.synd1))
+        # self.assertTrue (self.uut1.check_synd_node(0, self.word1[1], self.synd1))
 
         self.assertTrue (self.uut0.check_synd_node(1, self.word0[0], self.synd0))
-        self.assertTrue (self.uut1.check_synd_node(1, self.word0[0], self.synd0))
+        # self.assertTrue (self.uut1.check_synd_node(1, self.word0[0], self.synd0))
         self.assertTrue (self.uut0.check_synd_node(1, self.word0[1], self.synd0))
-        self.assertTrue (self.uut1.check_synd_node(1, self.word0[1], self.synd0))
+        # self.assertTrue (self.uut1.check_synd_node(1, self.word0[1], self.synd0))
         self.assertTrue (self.uut0.check_synd_node(1, self.word1[0], self.synd1))
-        self.assertTrue (self.uut1.check_synd_node(1, self.word1[0], self.synd1))
+        # self.assertTrue (self.uut1.check_synd_node(1, self.word1[0], self.synd1))
         self.assertTrue (self.uut0.check_synd_node(1, self.word1[1], self.synd1))
-        self.assertTrue (self.uut1.check_synd_node(1, self.word1[1], self.synd1))
+        # self.assertTrue (self.uut1.check_synd_node(1, self.word1[1], self.synd1))
         
         self.assertFalse(self.uut0.check_synd_node(0, self.word0[0], self.synd1))
-        self.assertFalse(self.uut1.check_synd_node(0, self.word0[0], self.synd1))
+        # self.assertFalse(self.uut1.check_synd_node(0, self.word0[0], self.synd1))
         self.assertFalse(self.uut0.check_synd_node(0, self.word0[1], self.synd1))
-        self.assertFalse(self.uut1.check_synd_node(0, self.word0[1], self.synd1))
+        # self.assertFalse(self.uut1.check_synd_node(0, self.word0[1], self.synd1))
         self.assertFalse(self.uut0.check_synd_node(0, self.word1[0], self.synd0))
-        self.assertFalse(self.uut1.check_synd_node(0, self.word1[0], self.synd0))
+        # self.assertFalse(self.uut1.check_synd_node(0, self.word1[0], self.synd0))
         self.assertFalse(self.uut0.check_synd_node(0, self.word1[1], self.synd0))
-        self.assertFalse(self.uut1.check_synd_node(0, self.word1[1], self.synd0))
+        # self.assertFalse(self.uut1.check_synd_node(0, self.word1[1], self.synd0))
 
         self.assertTrue (self.uut0.check_synd_node(1, self.word0[0], self.synd1))
-        self.assertTrue (self.uut1.check_synd_node(1, self.word0[0], self.synd1))
+        # self.assertTrue (self.uut1.check_synd_node(1, self.word0[0], self.synd1))
         self.assertTrue (self.uut0.check_synd_node(1, self.word0[1], self.synd1))
-        self.assertTrue (self.uut1.check_synd_node(1, self.word0[1], self.synd1))
+        # self.assertTrue (self.uut1.check_synd_node(1, self.word0[1], self.synd1))
         self.assertTrue (self.uut0.check_synd_node(1, self.word1[0], self.synd0))
-        self.assertTrue (self.uut1.check_synd_node(1, self.word1[0], self.synd0))
+        # self.assertTrue (self.uut1.check_synd_node(1, self.word1[0], self.synd0))
         self.assertTrue (self.uut0.check_synd_node(1, self.word1[1], self.synd0))
-        self.assertTrue (self.uut1.check_synd_node(1, self.word1[1], self.synd0))
+        # self.assertTrue (self.uut1.check_synd_node(1, self.word1[1], self.synd0))
 
         return
 
 
     def test_check_word(self):        
         self.assertTrue (self.uut0.check_word(self.word0[0], self.synd0))
-        self.assertTrue (self.uut1.check_word(self.word0[0], self.synd0))
+        # self.assertTrue (self.uut1.check_word(self.word0[0], self.synd0))
         self.assertTrue (self.uut0.check_word(self.word0[1], self.synd0))
-        self.assertTrue (self.uut1.check_word(self.word0[1], self.synd0))
+        # self.assertTrue (self.uut1.check_word(self.word0[1], self.synd0))
         self.assertTrue (self.uut0.check_word(self.word1[0], self.synd1))
-        self.assertTrue (self.uut1.check_word(self.word1[0], self.synd1))
+        # self.assertTrue (self.uut1.check_word(self.word1[0], self.synd1))
         self.assertTrue (self.uut0.check_word(self.word1[1], self.synd1))
-        self.assertTrue (self.uut1.check_word(self.word1[1], self.synd1))
+        # self.assertTrue (self.uut1.check_word(self.word1[1], self.synd1))
 
         self.assertFalse(self.uut0.check_word(self.word0[0], self.synd1))
-        self.assertFalse(self.uut1.check_word(self.word0[0], self.synd1))
+        # self.assertFalse(self.uut1.check_word(self.word0[0], self.synd1))
         self.assertFalse(self.uut0.check_word(self.word0[1], self.synd1))
-        self.assertFalse(self.uut1.check_word(self.word0[1], self.synd1))
+        # self.assertFalse(self.uut1.check_word(self.word0[1], self.synd1))
         self.assertFalse(self.uut0.check_word(self.word1[0], self.synd0))
-        self.assertFalse(self.uut1.check_word(self.word1[0], self.synd0))
+        # self.assertFalse(self.uut1.check_word(self.word1[0], self.synd0))
         self.assertFalse(self.uut0.check_word(self.word1[1], self.synd0))
-        self.assertFalse(self.uut1.check_word(self.word1[1], self.synd0))
+        # self.assertFalse(self.uut1.check_word(self.word1[1], self.synd0))
         return
 
 
@@ -127,10 +121,10 @@ class TestDecoderConstruction(unittest.TestCase):
         self.assertFalse(self.uut0.check_lappr(lappr_0, self.synd1))
         self.assertTrue (self.uut0.check_lappr(lappr_1, self.synd1))
         self.assertFalse(self.uut0.check_lappr(lappr_1, self.synd0))
-        self.assertTrue (self.uut1.check_lappr(lappr_0, self.synd0))
-        self.assertFalse(self.uut1.check_lappr(lappr_0, self.synd1))
-        self.assertTrue (self.uut1.check_lappr(lappr_1, self.synd1))
-        self.assertFalse(self.uut1.check_lappr(lappr_1, self.synd0))
+        # self.assertTrue (self.uut1.check_lappr(lappr_0, self.synd0))
+        # self.assertFalse(self.uut1.check_lappr(lappr_0, self.synd1))
+        # self.assertTrue (self.uut1.check_lappr(lappr_1, self.synd1))
+        # self.assertFalse(self.uut1.check_lappr(lappr_1, self.synd0))
         return
 
 
@@ -140,7 +134,7 @@ class TestDecoderProcessing(unittest.TestCase):
         df = pd.DataFrame({'eid' : [*range(8)],
                            'cid' : [0, 0, 0, 1, 1, 2, 2, 2],
                            'vid' : [0, 1, 3, 1, 2, 1, 3, 4]})
-        self.uut = Decoder(df, False)
+        self.uut = Decoder(df.vid.to_numpy(), df.cid.to_numpy())
         return
 
     
@@ -231,7 +225,7 @@ class TestDecoderProcessing(unittest.TestCase):
 class TestDecoderDecoding(unittest.TestCase):
     def setUp(self):
         df = pd.read_csv("test/hamming_7-4.csv")
-        self.uut = Decoder(df)
+        self.uut = Decoder(df.vid[1:].to_numpy(), df.cid[1:].to_numpy())
         return
 
 

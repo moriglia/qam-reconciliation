@@ -24,22 +24,21 @@ if __name__=="__main__":
                         action="store_true",
                         help="Flag: does the first line of the csv contain the number of edges")
     parser.add_argument("--simloops",     default = 30, type=int)
-    
+    parser.add_argument("--snr", type=float, nargs=2, default=[0,5])
+    parser.add_argument("--nsnr", type=int, default=11)
 
     args = parser.parse_args()
 
     
     edge_df = pd.read_csv(args.edgefile)
-    mat = qamr.Matrix(edge_df, args.first_row)
-    N = mat.vnum
-
+    
     # input_error_count = [N//20,  N//25,   N//30,   N//40,   N//50,  N//60,
     #                      N//75,  N//100,  N//120,  N//150,  N//160, N//200,
     #                      N//600, N//1000, N//2000, N//5000, 5,      1]
 
     # input_error_count = [N//10, N//20, N//25, N//30, N//35, N//40, N//45, N//50, N//100]
 
-    EbN0dB = np.linspace(0, 5, 11)
+    EbN0dB = np.linspace(args.snr[0], args.snr[1], args.nsnr)
     
     @parfor(EbN0dB)
     def final_ber(EbN0dB_val):
@@ -52,36 +51,42 @@ if __name__=="__main__":
         decoding_iterations = 0
         successful_decoding = 0
 
-        dec = qamr.Decoder(edge_df)
-        
+        dec = qamr.Decoder(edge_df.vid[1:].to_numpy(),
+                           edge_df.cid[1:].to_numpy())
+        mat = qamr.Matrix(edge_df.vid[1:].to_numpy(),
+                          edge_df.cid[1:].to_numpy())
+        N = mat.vnum
+    
         for wordcount in range(args.simloops):
-            # error_vector = GF2([*[1]*num_errors, *[0]*(N-num_errors)])
-            # np.random.shuffle(error_vector)
-            
+        
             word = GF2.Random(N)
             synd = mat.eval_syndrome(word)
 
             # rcvs = -2*np.array(word, dtype=int)+1 + sigma*np.random.randn(word.size)
             # llr = 2*rcvs/sigma**2 * np.log2(np.exp(1))
-            llr = 2*np.log2(np.exp(1))/sigma**2 * (-2*np.array(word, dtype=int)+1 + \
-                                                   sigma*np.random.randn(word.size))
+            llr = 2*np.log2(np.exp(1))/(sigma**2) * \
+                (-2*np.array(word, dtype=np.longdouble)+1 + \
+                 sigma*np.random.randn(word.size))
             
             (success, itcount, lappr_final) = dec.decode(llr, synd, args.maxiter)
             
             if (success):
                 decoding_iterations += itcount
                 successful_decoding += 1
-                continue
+                # continue
 
-            err_count += np.array(GF2((np.array(lappr_final) < 0).astype(int)) + word,
+            new_errors = np.array(GF2((np.array(lappr_final) < 0).astype(np.ubyte)) + word,
                                   dtype=int).sum()
-            frame_error_count += 1
-            
-            if (err_count >= args.minerr and wordcount > args.simloops):
+            if (new_errors):
+                frame_error_count += 1
+                err_count += new_errors
+        
+            if (err_count >= args.minerr and wordcount > args.simloops/20):
+                print(f"[{EbN0dB_val}, iteration {wordcount}] found {err_count} errors")
                 break
 
 
-        wordcount = wordcount + 1
+        wordcount += 1
         return (EbN0dB_val,
                 err_count           / (wordcount*N),
                 frame_error_count   / wordcount,

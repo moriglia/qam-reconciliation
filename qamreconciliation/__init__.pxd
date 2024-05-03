@@ -1,2 +1,2 @@
 from .decoder cimport Decoder
-from .matrix import Matrix
+from .matrix cimport Matrix
