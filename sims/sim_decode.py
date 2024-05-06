@@ -7,7 +7,7 @@ if __name__=="__main__":
     import qamreconciliation as qamr
     import numpy as np
     import pandas as pd
-    
+    from qamreconciliation.decoder_cy import Decoder as CyDecoder
     
     parser = argparse.ArgumentParser(
         prog="sim_decode",
@@ -51,8 +51,8 @@ if __name__=="__main__":
         decoding_iterations = 0
         successful_decoding = 0
 
-        dec = qamr.Decoder(edge_df.vid[1:].to_numpy(),
-                           edge_df.cid[1:].to_numpy())
+        dec = CyDecoder(edge_df.vid[1:].to_numpy(),
+                        edge_df.cid[1:].to_numpy())
         mat = qamr.Matrix(edge_df.vid[1:].to_numpy(),
                           edge_df.cid[1:].to_numpy())
         N = mat.vnum
@@ -65,7 +65,7 @@ if __name__=="__main__":
             # rcvs = -2*np.array(word, dtype=int)+1 + sigma*np.random.randn(word.size)
             # llr = 2*rcvs/sigma**2 * np.log2(np.exp(1))
             llr = 2*np.log2(np.exp(1))/(sigma**2) * \
-                (-2*np.array(word, dtype=np.longdouble)+1 + \
+                (-2*np.array(word, dtype=np.double)+1 + \
                  sigma*np.random.randn(word.size))
             
             (success, itcount, lappr_final) = dec.decode(llr, synd, args.maxiter)
