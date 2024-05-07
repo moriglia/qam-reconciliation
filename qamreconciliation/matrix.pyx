@@ -54,9 +54,7 @@ cdef class Matrix:
         cdef int e
         cdef unsigned char [:] synd = np.zeros(self.__cnode_num, dtype=np.ubyte)
         for e in range(self.__edge_num):
-            synd[self.__cnode_arr[e]] += word[self.__vnode_arr[e]]
-        for e in range(self.__cnode_num):
-            synd[e] &= 0b1
+            synd[self.__cnode_arr[e]] ^= word[self.__vnode_arr[e]]
         return synd
 
     

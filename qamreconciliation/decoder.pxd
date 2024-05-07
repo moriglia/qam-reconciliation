@@ -1,89 +1,63 @@
-cimport numpy as np
-
-
 cdef class Decoder:
     cdef:
-        long [:] __cnode_arr
-        long [:] __vnode_arr
-        int __edge_num
-        int __vnode_num
-        int __cnode_num
+        long __chk_num, __var_num, __edge_num
+        long [:] __e_to_c
+        long [:] __e_to_v
         long ** __c_to_e
         long ** __v_to_e
-        long double [:] __check_to_var 
-        long double [:] __var_to_check 
-        long double [:] __updated_lappr
-        # long double [:] __tanh_values  
-        long double [:] __lappr_data   
+        long ** __c_to_v
+        
+        double [:] __lappr_data
+        double [:] __updated_lappr
+        double [:] __check_to_var
+        double [:] __var_to_check
+
         unsigned char [:] __synd
-        unsigned char [:] __word    
+        unsigned char [:] __word
 
-    cdef void __free_tables(self)
+    # cdef void __alloc_messages(self)
 
-    cdef unsigned char __check_synd_node(self, int check_node_index)
+    # cdef void __free_messages(self)
+        
+    cdef unsigned char __check_synd_node(self, long check_node_index) noexcept nogil
+
+    cpdef unsigned char check_synd_node(self,
+                                        long check_node_index,
+                                        unsigned char [:] word,
+                                        unsigned char [:] synd)
     
+    cdef unsigned char __check_word(self) nogil
 
-    cpdef unsigned char check_synd_node(
-        self,
-        int check_node_index,
-        unsigned char [:] word,
-        unsigned char [:] synd
-    )
+    cpdef unsigned char check_word(self,
+                                   unsigned char [:] word,
+                                   unsigned char [:] synd)
 
+    cdef unsigned char __check_lappr_node(self, long check_node_index) noexcept nogil
 
-    cdef unsigned char __check_word(self)
+    cdef unsigned char __check_lappr(self) nogil
 
+    cpdef unsigned char check_lappr(self,
+                                    double [:] lappr,
+                                    unsigned char [:] synd)
 
-    cpdef unsigned char check_word(
-        self,
-        unsigned char [:] word,
-        unsigned char [:] synd
-    )
+    cdef void __process_var_node(self, long node_index) nogil
 
+    cpdef void process_var_node(self,
+                                long node_index,
+                                double [:] lappr_data,
+                                double [:] check_to_var,
+                                double [:] var_to_check,
+                                double [:] updated_lappr)
 
-    cdef unsigned char __check_synd_node_lappr(self, int node_index)
+    cdef void __process_check_node(self, long node_index) nogil
 
+    cpdef void process_check_node(self,
+                                  long node_index,
+                                  unsigned char [:] synd,
+                                  double [:] check_to_var,
+                                  double [:] var_to_check)
 
-    cdef unsigned char __check_lappr(self)
-
-
-    cpdef unsigned char check_lappr(
-        self,
-        long double[:]    lappr,
-        unsigned char [:] synd
-    )
-
-
-    cdef void __process_var_node(self, int node_index)
-
-
-    cpdef void process_var_node(
-        self,
-        int             node_index,
-        long double [:] lappr_data,
-        long double [:] check_to_var,
-        long double [:] var_to_check,
-        long double [:] updated_lappr
-    )
-
-
-    cdef void __process_check_node(self, int node_index)
-
-
-    cpdef void process_check_node(
-        self,
-        int               node_index,
-        unsigned char [:] synd,
-        long double [:]   check_to_var,
-        long double [:]   var_to_check
-    )
-
-
-    cpdef tuple decode(
-        self,
-        long double [:]   lappr_data,
-        unsigned char [:] synd,
-        int max_iterations
-    )
-
-    
+    cpdef tuple decode(self,
+                       double [:] lappr_data,
+                       unsigned char [:] synd,
+                       int max_iterations)

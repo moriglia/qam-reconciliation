@@ -1,5 +1,5 @@
 from qamreconciliation.decoder_py import Decoder as PyDecoder
-from qamreconciliation.decoder_cy import Decoder as CyDecoder
+from qamreconciliation.decoder import Decoder as CyDecoder
 from qamreconciliation import Matrix
 from galois import GF2
 import numpy as np

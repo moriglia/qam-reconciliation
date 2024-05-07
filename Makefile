@@ -8,7 +8,7 @@ PYX_LIST = $(shell find qamreconciliation/ -name "*.pyx" )
 OBJ_LIST = $(PYX_LIST:.pyx=$(OUT_SUFFIX))
 
 
-.PHONY: default
+.PHONY: default clean
 
 
 default: $(OBJ_LIST)
@@ -16,3 +16,6 @@ default: $(OBJ_LIST)
 
 %$(OUT_SUFFIX): %.pyx $(wildcard *.pxd)
 	CFLAGS=-I$(NUMPY_INCLUDE_DIR) cythonize -3 -i $(EXTRA_FLAGS) $<
+
+clean:
+	rm $(OBJ_LIST)

@@ -1,6 +1,6 @@
 if __name__=="__main__":
     from qamreconciliation import Matrix as qamMatrix
-    from qamreconciliation.decoder_cy import Decoder as qamDecoder
+    from qamreconciliation import Decoder as qamDecoder
     from galois import GF2
     import pandas as pd
     import numpy as np

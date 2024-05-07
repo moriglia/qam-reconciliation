@@ -7,7 +7,7 @@ if __name__=="__main__":
     import qamreconciliation as qamr
     import numpy as np
     import pandas as pd
-    from qamreconciliation.decoder_cy import Decoder as CyDecoder
+    from qamreconciliation.decoder import Decoder as CyDecoder
     
     parser = argparse.ArgumentParser(
         prog="sim_decode",

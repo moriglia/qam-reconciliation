@@ -1,5 +1,6 @@
 **/__pycache__/
 **/.ipynb_*/
 build/
+cython_debug/
 *.so
 *.c

@@ -1,10 +1,22 @@
-# -*- mode: cython; gud -*- 
-import numpy as np
-cimport numpy as np
 from libc.stdlib cimport malloc, free
+cimport cython
+cimport numpy as np
+import numpy as np
+#from cython.view cimport array as cvarray
+from libc.math cimport exp as cexp, log as cln, abs as cabs
 
 
-cdef void __free_table(long** table, long tsize):
+cdef inline int __sgn(double x) nogil:
+    return (0.0 < x) - (x < 0.0)
+
+
+# cdef inline void __free_array(void* arr):
+#     if arr:
+#         free(arr)
+#     return
+
+
+cdef void __free_table(long** table, long tsize) noexcept nogil:
     cdef int i;
     if (table):
         for i in range(tsize):
@@ -16,12 +28,12 @@ cdef void __free_table(long** table, long tsize):
     return
 
 
-cdef long** __build_table(long[:] e_to_x, int num_x):
+cdef long** __build_table(long[:] e_to_x, int num_x) noexcept:
     cdef long i, e, l;
     cdef long** table;
     cdef list edges_i;
 
-    table = <long**>malloc(sizeof(long*)*num_x);
+    table = <long**> malloc(sizeof(long*)*num_x);
     if not table:
         return <long**>0
     
@@ -31,8 +43,6 @@ cdef long** __build_table(long[:] e_to_x, int num_x):
         l = 0;
         for e in range(e_to_x.size):
             if (e_to_x[e]==i):
-                # the selected edge `e` ends in node `i`
-                # so, I add `e` to the list of edges of `i`
                 edges_i.append(e)
                 l += 1
 
@@ -41,402 +51,360 @@ cdef long** __build_table(long[:] e_to_x, int num_x):
         # entry as the size of the entry
         table[i] = <long*>malloc(sizeof(long)*(l+1))
         if not table[i]:
-            __free_table(table, i+1)
+            __free_table(table, i)
             return <long**>0
         table[i][0] = l;
         for e in range(len(edges_i)):
-            # now e means another thing
-            # but I am just re-using it
             table[i][e+1] = edges_i[e];
     
     return table;
 
 
 cdef class Decoder:
-    """ Decoder
+    def __cinit__(self, long [:] e_to_v, long [:] e_to_c):
+        cdef long i, c
 
-        Decoder(long [:] vnode_array, long [:] cnode_array)
-
-        vnode_array: each entry `i` contains the index of the
-            variable node to which the `i`-th edge is connected
-
-        cnode_array: each entry `i` contains the index of the
-            check node to which the `i`-th edge is connected
-
-        that means, edge `i`:
-            (cnode_array[i], cnode_array[i])
-        connects check node cnode_array[i] to var node vnode_array[i]
-    """
-    def __cinit__(self, long [:] vnode_array, long [:] cnode_array):
-        if (vnode_array.shape[0] != cnode_array.shape[0]):
-            raise ValueError("Incompatible sizes for input vectors")
+        if (e_to_v.size != e_to_c.size):
+            raise ValueError("Sizes don't match")
         
-        # store arrays
-        self.__vnode_arr = vnode_array
-        self.__cnode_arr = cnode_array
-        
-        # get edge, cnode and vnode numbers
-        self.__edge_num  = vnode_array.shape[0]
-        self.__cnode_num = max(cnode_array) + 1
-        self.__vnode_num = max(vnode_array) + 1
+        self.__e_to_c = e_to_c
+        self.__e_to_v = e_to_v
+        self.__edge_num = e_to_c.size
+        self.__chk_num  = max(e_to_c) + 1
+        self.__var_num  = max(e_to_v) + 1
 
-        ###############################################
-        ###      Evaluate node to edge tables:      ###
-        ###############################################
-        self.__c_to_e = __build_table(cnode_array, self.__cnode_num)
-        if not self.__c_to_e:
-            raise MemoryError()
-        self.__v_to_e = __build_table(vnode_array, self.__vnode_num)
+        # Reverse tables
+        self.__v_to_e = __build_table(e_to_v, self.__var_num)
         if not self.__v_to_e:
-            __free_table(self.__c_to_e, self.__c_num)
             raise MemoryError()
-        
-        # self.__c_to_e = <long**>malloc(sizeof(long*)*self.__cnode_num)
-        # if not self.__c_to_e:
-        #     raise MemoryError()
-        # self.__v_to_e = <long**>malloc(sizeof(long*)*self.__vnode_num)
-        # if not self.__v_to_e:
-        #     free(self.__c_to_e)
-        #     raise MemoryError()
 
-        # cdef list tmp_edges
-        # cdef long i, j, l
-        # for i in range(self.__cnode_num):
-        #     tmp_edges = []
-        #     l = 0
-            
-        #     # save all edge indices in a list
-        #     for j in range(self.__edge_num):
-        #         if (self.__cnode_arr[j]==i):
-        #             tmp_edges.append(j)
-        #             l+=1
-                    
-        #     # allocate the right size for the list of coefficients
-        #     # and store them in the new array
-        #     self.__c_to_e[i] = <long*>malloc(sizeof(long)*(l+1))
-        #     if not self.__c_to_e[i]:
-        #         for j in range(i):
-        #             free(self.__c_to_e[j])
-        #         free(self.__c_to_e)
-        #         free(self.__v_to_e)
-        #         raise MemoryError()
-        #     self.__c_to_e[i][0] = l # first element is the degree of the check node
-        #     for j in range(l):
-        #         self.__c_to_e[i][j+1] = tmp_edges[j]
+        self.__c_to_e = __build_table(e_to_c, self.__chk_num)
+        if not self.__c_to_e:
+            __free_table(self.__v_to_e, self.__var_num)
+            raise MemoryError()
 
-        # # repeat for variable nodes
-        # for i in range(self.__vnode_num):
-        #     tmp_edges = []
-        #     l = 0
-            
-        #     # save all edge indices in a list
-        #     for j in range(self.__edge_num):
-        #         if (self.__vnode_arr[j]==i):
-        #             tmp_edges.append(j)
-        #             l += 1
-                    
-        #     # allocate the right size for the list of coefficients
-        #     # and store them in the new array
-        #     self.__v_to_e[i] = <long*>malloc(sizeof(long)*(l+1))
-        #     if not self.__v_to_e[i]:
-        #         for j in range(i):
-        #             free(self.__v_to_e[j])
-        #         for j in range(self.__cnode_num):
-        #             free(self.__c_to_e[j])
-        #         free(self.__v_to_e)
-        #         free(self.__c_to_e)
-        #         raise MemoryError()
-        #     self.__v_to_e[i][0] = l # first element is the degree of the check node
-        #     for j in range(l):
-        #         self.__v_to_e[i][j+1] = tmp_edges[j]
+        self.__c_to_v = <long**>malloc(sizeof(long*)*self.__chk_num)
+        if not self.__c_to_v:
+            __free_table(self.__v_to_e, self.__var_num)
+            __free_table(self.__c_to_e, self.__chk_num)
+            raise MemoryError()
+        for c in range(self.__chk_num):
+            self.__c_to_v[c] = <long*>malloc(sizeof(long)*(self.__c_to_e[c][0]+1))
+            if not self.__c_to_v[c]:
+                __free_table(self.__c_to_v, c)
+                __free_table(self.__v_to_e, self.__var_num)
+                __free_table(self.__c_to_e, self.__chk_num)
+                raise MemoryError()
+            self.__c_to_v[c][0] = self.__c_to_e[c][0]
+            for i in range(1, self.__c_to_e[c][0]+1):
+                self.__c_to_v[c][i] = self.__e_to_v[self.__c_to_e[c][i]]
 
-        return
-
-    
-    cdef void __free_tables(self):
-        __free_table(self.__v_to_e, self.__vnode_num)
-        __free_table(self.__c_to_e, self.__cnode_num)
+        self.__var_to_check = None
+        self.__check_to_var = None
+        self.__updated_lappr= None
         return
 
     
     def __dealloc__(self):
-        self.__free_tables()
+        __free_table(self.__v_to_e, self.__var_num)
+        __free_table(self.__c_to_e, self.__chk_num)
+        __free_table(self.__c_to_v, self.__chk_num)
         return
+
+
+    # cdef void __alloc_messages(self):
+    #     if self.__var_to_check is None:
+    #         self.__var_to_check = <double[:self.__edge_num]>malloc(
+    #             self.__edge_num*sizeof(double))
+    #         if self.__var_to_check is None:
+    #             raise MemoryError()
+    #     if self.__check_to_var is None:
+    #         self.__check_to_var = <double[:self.__edge_num]>malloc(
+    #             self.__edge_num*sizeof(double))
+    #         if self.__check_to_var is None:
+    #             self.__free_messages()
+    #             raise MemoryError()
+    #     if self.__updated_lappr is None:
+    #         self.__updated_lappr = <double[:self.__var_num]>malloc(
+    #             self.__var_num*sizeof(double))
+    #         if self.__updated_lappr is None:
+    #             self.__free_messages()
+    #             raise MemoryError()
+    #     return
+
     
+    # cdef void __free_messages(self):
+    #     __free_array(<void*>self.__var_to_check)
+    #     __free_array(<void*>self.__check_to_var)
+    #     __free_array(<void*>self.__updated_lappr)
+    #     self.__var_to_check  = None
+    #     self.__check_to_var  = None
+    #     self.__updated_lappr = None
+    #     return
+
+
     
     @property
-    def cnum(self) -> int:
+    def cnum(self):
         """ Number of check nodes """
-        return self.__cnode_num
+        return self.__chk_num
 
     
     @property
-    def vnum(self) -> int:
+    def vnum(self):
         """ Number of variable nodes """
-        return self.__vnode_num
+        return self.__var_num
 
 
     @property
-    def ednum(self) -> int:
+    def ednum(self):
         """ Number of edges """
         return self.__edge_num
 
 
-    """ Syndrome checking functions """
-    cdef unsigned char __check_synd_node(self, int check_node_index):
-        cdef unsigned char check_sum = self.__synd[check_node_index] ^ 0b1
-        # so that check_sum==synd[...] is true
+
+    """ Syndrome checking functions """    
+    cdef unsigned char __check_synd_node(self, long check_node_index) noexcept nogil:
+        # cdef long * index_set
+        cdef long * vnode_set
         cdef int i
-        for i in range(1, self.__c_to_e[check_node_index][0]+1):
-            check_sum ^= self.__word[self.__vnode_arr[self.__c_to_e[check_node_index][i]]]
-        return check_sum
+        # cdef unsigned char parity = self.__synd[check_node_index]
+        cdef unsigned char parity
+        with cython.boundscheck(False):
+            parity = self.__synd[check_node_index]
+
+        # index_set = self.__c_to_e[check_node_index]
+        vnode_set = self.__c_to_v[check_node_index]
+        # for i in range(1, index_set[0]+1):
+        with cython.boundscheck(False):
+            for i in range(1, vnode_set[0]+1):
+                # toggle parity every time the word bit is 1
+                # parity ^= self.__word[self.__e_to_v[index_set[i]]]
+                parity ^= self.__word[vnode_set[i]]
+        return parity ^ 0b1
 
 
-    cpdef unsigned char check_synd_node(
-        self,
-        int               check_node_index,
-        unsigned char [:] word,
-        unsigned char [:] synd):
+    cpdef unsigned char check_synd_node(self,
+                                        long check_node_index,
+                                        unsigned char [:] word,
+                                        unsigned char [:] synd):
+        cdef unsigned char res
+
+        if (word.size != self.__var_num):
+            raise ValueError("Size of word does not match number of vnodes")
+        if (synd.size != self.__chk_num):
+            raise ValueError("Size of synd does not match number of cnodes")
+
         self.__word = word
         self.__synd = synd
 
-        try:
-            return self.__check_synd_node(check_node_index)
-        finally:
-            self.__word = None
-            self.__synd = None
+        res = self.__check_synd_node(check_node_index)
 
+        self.__word = None
+        self.__synd = None
+
+        return res
 
     
-    cdef unsigned char __check_word(self):
-        cdef int i;
-        for i in range(self.__cnode_num):
-            if (self.__check_synd_node(i) == 0):
+    cdef unsigned char __check_word(self) nogil:
+        cdef long c_index
+        for c_index in range(self.__chk_num):
+            if not self.__check_synd_node(c_index):
                 return 0
-        return 1
-    
+        return 0b1
 
-    cpdef unsigned char check_word(
-        self,
-        unsigned char [:] word,
-        unsigned char [:] synd
-    ):
+    
+    cpdef unsigned char check_word(self,
+                                   unsigned char [:] word,
+                                   unsigned char [:] synd):
+        cdef unsigned char res
         self.__word = word
         self.__synd = synd
 
-        try:
-            return self.__check_word()
-        finally:
-            self.__word = None
-            self.__synd = None
+        res = self.__check_word()
+
+        self.__word  = None
+        self.__synd  = None
+
+        return res
+
+            
+    cdef unsigned char __check_lappr_node(self, long check_node_index) noexcept nogil:
+        cdef int i
+        # cdef long * index_set = self.__c_to_e[check_node_index]
+        cdef long * vnode_set = self.__c_to_v[check_node_index]
+        # cdef unsigned char parity = self.__synd[check_node_index]
+        cdef unsigned char parity
+        
+        with cython.boundscheck(False):
+            parity = self.__synd[check_node_index]
+            
+            # for i in range(1, index_set[0]+1):
+            for i in range(1, vnode_set[0]+1):
+                # if (self.__updated_lappr[self.__e_to_v[index_set[i]]] < 0):
+                if (self.__updated_lappr[vnode_set[i]] < 0):
+                    # toggle parity every time a negative lappr is met
+                    parity ^= 0b1
+        
+        return parity ^ 0b1
 
 
-    cdef unsigned char __check_synd_node_lappr(self, int node_index):
-        cdef int i ;
-        cdef unsigned char parity = 0
-        # -1.0 if (self.__synd[node_index]) else 1.0 ;
-        for i in range(1, self.__c_to_e[node_index][0]+1):
-            if (self.__updated_lappr[self.__vnode_arr[self.__c_to_e[node_index][i]]] == 0):
-                return 0
-            if (self.__updated_lappr[self.__vnode_arr[self.__c_to_e[node_index][i]]] < 0):
-                parity ^= 0b1
-            # prod *= self.__updated_lappr[self.__vnode_arr[self.__c_to_e[node_index][i]]]
-        parity ^= self.__synd[node_index] ^ 0b1
-        return parity & 0b1
+    cdef unsigned char __check_lappr(self) nogil:
+        cdef long i
 
-
-    cdef unsigned char __check_lappr(self):
-        cdef int i;
-        for i in range(self.__cnode_num):
-            if (self.__check_synd_node_lappr(i) == 0):
+        for i in range(self.__chk_num):
+            if not self.__check_lappr_node(i):
                 return 0
         return 1
+    
+    
+    cpdef unsigned char check_lappr(self,
+                                    double [:] lappr,
+                                    unsigned char [:] synd):
+        cdef unsigned char res
 
-
-    cpdef unsigned char check_lappr(
-        self,
-        long double [:]   lappr,
-        unsigned char [:] synd
-    ):
+        
+        if (lappr.size != self.__var_num):
+            raise ValueError("Size of lappr does not match number of vnodes")
+        if (synd.size != self.__chk_num):
+            raise ValueError("Size of synd does not match number of cnodes")
+        
+        
         self.__updated_lappr = lappr
         self.__synd = synd
 
-        try:
-            return self.__check_lappr()
-        finally:
-            self.__updated_lappr = None
-            self.__synd = None
+        res = self.__check_lappr()
+
+        self.__word = None
+        self.__synd = None
+
+        return res
     
 
     """ Message passing processing functions """
-    cdef void __process_var_node(self, int node_index):
-        # cdef np.ndarray[long, ndim=1] index_set = \
-        #     np.nonzero(np.asarray(self.__vnode_arr, dtype=int)==node_index)[0]
-
+    cdef void __process_var_node(self, long node_index) nogil:
+        cdef long* index_set
         cdef int i
-        self.__updated_lappr[node_index] = self.__lappr_data[node_index]
-        for i in range(1, self.__v_to_e[node_index][0]+1):
-            self.__updated_lappr[node_index] += self.__check_to_var[self.__v_to_e[node_index][i]]
+        # index_set = np.array(self.edges.eid[self.edges.vid==node_index])
+        index_set = self.__v_to_e[node_index]
 
-        
-        for i in range(1, self.__v_to_e[node_index][0]+1):
-            self.__var_to_check[self.__v_to_e[node_index][i]] = \
-                self.__updated_lappr[node_index] - \
-                self.__check_to_var[self.__v_to_e[node_index][i]]
+        with cython.boundscheck(False):
+            self.__updated_lappr[node_index] = self.__lappr_data[node_index]
+            for i in range(1, index_set[0]+1):
+                self.__updated_lappr[node_index] += self.__check_to_var[index_set[i]]
+                
+            for i in range(1, index_set[0]+1):
+                self.__var_to_check[index_set[i]] = self.__updated_lappr[node_index] \
+                    - self.__check_to_var[index_set[i]]
         return
 
 
-    cpdef void process_var_node(
-        self,
-        int node_index,
-        long double [:] lappr_data,
-        long double [:] check_to_var,
-        long double [:] var_to_check,
-        long double [:] updated_lappr
-    ):
+    cpdef void process_var_node(self,
+                                long node_index,
+                                double [:] lappr_data,
+                                double [:] check_to_var,
+                                double [:] var_to_check,
+                                double [:] updated_lappr):
         self.__lappr_data = lappr_data
         self.__check_to_var = check_to_var
         self.__var_to_check = var_to_check
         self.__updated_lappr = updated_lappr
         
-        try:
-            self.__process_var_node(node_index)
-        finally:
-            self.__lappr_data    = None
-            self.__check_to_var  = None
-            self.__var_to_check  = None
-            self.__updated_lappr = None
+        self.__process_var_node(node_index)
+
+        self.__lappr_data    = None
+        self.__check_to_var  = None
+        self.__var_to_check  = None
+        self.__updated_lappr = None
 
         return
 
             
-    cdef void __process_check_node(self, int node_index):
-        cdef long double prefactor
-        cdef long double arctanh_partial# = 1.0
-        cdef long double message_from_v
-        cdef int i, j #, zerocount, zeroindex
-        # zerocount = 0
-        prefactor = -2.0 if (self.__synd[node_index]==0b1) else 2.0
-        # for i in range(1, self.__c_to_e[node_index][0]+1):
-        #     if (self.__tanh_values[self.__c_to_e[node_index][i]]==0.0):
-        #         zerocount += 1
-        #         zeroindex = i
-        #     else:
-        #         allprod *= self.__tanh_values[self.__c_to_e[node_index][i]]
-            
-        # if (zerocount == 0):
-        #     for i in range(1, self.__c_to_e[node_index][0]+1):
-        #         self.__check_to_var[self.__c_to_e[node_index][i]] = prefactor*np.arctanh(
-        #             allprod / self.__tanh_values[self.__c_to_e[node_index][i]]
-        #         )
-        # else:
-        #     if (zerocount != 1):
-        #         zeroindex = -1
-        #     for i in range(1, self.__c_to_e[node_index][0]+1):
-        #         if (zeroindex==i):
-        #             self.__check_to_var[self.__c_to_e[node_index][i]] = prefactor*np.arctanh(allprod)
-        #         else:
-        #             self.__check_to_var[self.__c_to_e[node_index][i]] = 0.0
-        for i in range(1, self.__c_to_e[node_index][0]+1):
-            arctanh_partial = 0.5*self.__var_to_check[self.__c_to_e[node_index][1]]
-            for j in range(2, self.__c_to_e[node_index][0]+1):
-                if (i!=j):
-                    message_from_v = self.__var_to_check[self.__c_to_e[node_index][j]]
-                    arctanh_partial = \
-                        np.sign(arctanh_partial)*np.sign(message_from_v)*\
-                        min(np.abs(arctanh_partial),
-                            np.abs(message_from_v)*0.5) + \
-                        0.5*(np.log(1+np.exp(-np.abs(message_from_v+2*arctanh_partial))) - \
-                             np.log(1+np.exp(-np.abs(message_from_v-2*arctanh_partial))))
-                    #allprod *= self.__tanh_values[self.__c_to_e[node_index][j]]
-            self.__check_to_var[self.__c_to_e[node_index][i]] = prefactor*arctanh_partial
+    cdef void __process_check_node(self, long node_index) nogil:
+        cdef long* index_set
+        cdef double prefactor
+        cdef int i, j
+        cdef double _atanh, _msg
 
-        return
+        index_set = self.__c_to_e[node_index]
+
+        with cython.boundscheck(False):
+            prefactor = -2.0 if self.__synd[node_index] else 2.0
+            for i in range(1, index_set[0]+1):
+                _atanh = 1e300 #should be large enough
                 
-    
-    cpdef void process_check_node(
-        self,
-        int node_index,
-        unsigned char [:] synd,
-        long double [:] check_to_var,
-        long double [:] var_to_check):
+                for j in range(1, index_set[0]+1):
+                    if (i!=j):
+                        _msg = self.__var_to_check[index_set[j]]
+                        _atanh = __sgn(_atanh)*__sgn(_msg) * \
+                            min(cabs(_atanh), cabs(_msg)*0.5)\
+                            + 0.5*(cln(1+cexp(-cabs(_msg + 2*_atanh))) -\
+                                   cln(1+cexp(-cabs(_msg - 2*_atanh))))
+                        
+                self.__check_to_var[index_set[i]] = prefactor*_atanh
+        return
 
-        cdef long i
-        
+    
+    cpdef void process_check_node(self,
+                                  long node_index,
+                                  unsigned char [:] synd,
+                                  double [:] check_to_var,
+                                  double [:] var_to_check):
         self.__check_to_var = check_to_var
         self.__var_to_check = var_to_check
         self.__synd         = synd
-        # self.__tanh_values  = np.empty_like(var_to_check)
 
-        # for i in range(len(var_to_check)):
-        #     self.__tanh_values[i] = np.tanh(0.5*var_to_check[i])
-            
-        try:
-            self.__process_check_node(node_index)
-        finally:
-            self.__check_to_var = None
-            self.__var_to_check = None
-            self.__synd         = None
-            # self.__tanh_values  = None
+        self.__process_check_node(node_index)
+
+        self.__check_to_var = None
+        self.__var_to_check = None
+        self.__synd         = None
             
         return
     
         
-    cpdef tuple decode(
-        self,
-        long double [:] lappr_data,
-        unsigned char [:] synd,
-        int max_iterations
-    ) :
-        cdef int iter_index, v, c, e
-        # cdef unsigned char check_ok
+    cpdef tuple decode(self,
+                       double [:] lappr_data,
+                       unsigned char [:] synd,
+                       int max_iterations):
 
-        # if (self.check_lappr(lappr_data, synd)):
-        #     return (True, 0, lappr_data)
+        cdef long iter_index, c, v, e
+        
+        if (self.check_lappr(lappr_data, synd)):
+            return (True, 0, lappr_data)
 
-        self.__check_to_var  = np.zeros(self.ednum, dtype=np.longdouble)
+        #self.__alloc_messages()
+        self.__check_to_var  = np.zeros(self.__edge_num, dtype=np.double)
         self.__var_to_check  = np.empty_like(self.__check_to_var)
         self.__updated_lappr = np.empty_like(lappr_data)
-        # self.__tanh_values   = np.empty_like(self.__var_to_check)
+        # self.__check_to_var  = cvarray(shape=(self.__edge_num,), itemsize=sizeof(double), format="i")
+        # self.__var_to_check  = cvarray(shape=(self.__edge_num,), itemsize=sizeof(double), format="i")
+        # self.__updated_lappr = cvarray(shape=(self.__var_num ,), itemsize=sizeof(double), format="i")
         self.__lappr_data    = lappr_data
         self.__synd          = synd
-        
-        try:
-            if (self.__check_lappr()):
-                return (True, 0, lappr_data)
 
-            # First half iteration to propagate lapprs to check nodes
-            # The following line also initializes var_to_check
-            for v in range(self.vnum):
+        # Initialize __check_to_var to 0
+        for e in range(self.__edge_num):
+            self.__check_to_var[e] = 0
+        
+        # First half iteration to propagate lapprs to check nodes
+        # The following line also initializes var_to_check
+        for v in range(self.__var_num):
+            self.__process_var_node(v)
+
+        
+        for iter_index in range(max_iterations):
+            for c in range(self.__chk_num):
+                self.__process_check_node(c)
+                
+            for v in range(self.__var_num):
                 self.__process_var_node(v)
-            
-            
-            for iter_index in range(1,max_iterations+1):
-                # prepare tanh values for check node processing
-                # for e in range(self.__edge_num):
-                #     self.__tanh_values[e] = np.tanh(0.5*self.__var_to_check[e])
+                
+            if (self.__check_lappr()):
+                return (True, iter_index+1, self.__updated_lappr)
 
-                # check node processing (half iteration)
-                # check_ok = 1
-                for c in range(self.__cnode_num):
-                    # check_ok *= self.__process_check_node(c)
-                    self.__process_check_node(c)
+        return (False, max_iterations, self.__updated_lappr)
 
-                # variable node processing (second half iteration)
-                for v in range(self.__vnode_num):
-                    self.__process_var_node(v)
 
-                # check for completion
-                if (self.__check_lappr()):
-                    return (True, iter_index, self.__updated_lappr)
-
-            return (False, max_iterations, self.__updated_lappr)
-        
-        finally:
-            self.__check_to_var  = None
-            self.__var_to_check  = None
-            self.__updated_lappr = None
-            self.__lappr_data    = None
-            self.__synd          = None
-            # self.__tanh_values   = None
-
+    
+    
