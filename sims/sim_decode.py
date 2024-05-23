@@ -26,6 +26,7 @@ if __name__=="__main__":
     parser.add_argument("--simloops",     default = 30, type=int)
     parser.add_argument("--snr", type=float, nargs=2, default=[0,5])
     parser.add_argument("--nsnr", type=int, default=11)
+    parser.add_argument("--alpha", type=float, default=1.0)
 
     args = parser.parse_args()
 
@@ -63,8 +64,9 @@ if __name__=="__main__":
             synd = mat.eval_syndrome(word)
 
             # rcvs = -2*np.array(word, dtype=int)+1 + sigma*np.random.randn(word.size)
-            # llr = 2*rcvs/sigma**2 * np.log2(np.exp(1))
-            llr = 2*np.log2(np.exp(1))/(sigma**2) * \
+            # llr = 2*rcvs/sigma**2 * np.log2(np.e)
+            # llr = 2*np.log2(np.e)/(sigma**2) * \
+            llr = 2*args.alpha/(sigma**2) * \
                 (-2*np.array(word, dtype=np.double)+1 + \
                  sigma*np.random.randn(word.size))
             
@@ -75,7 +77,7 @@ if __name__=="__main__":
                 successful_decoding += 1
                 # continue
 
-            new_errors = np.array(GF2((np.array(lappr_final) < 0).astype(np.ubyte)) + word,
+            new_errors = np.array(GF2((np.array(lappr_final[:N//2]) < 0).astype(np.ubyte)) + word[:N//2],
                                   dtype=int).sum()
             if (new_errors):
                 frame_error_count += 1
@@ -88,7 +90,7 @@ if __name__=="__main__":
 
         wordcount += 1
         return (EbN0dB_val,
-                err_count           / (wordcount*N),
+                err_count           / (wordcount*(N//2)),
                 frame_error_count   / wordcount,
                 0 if (successful_decoding == 0) else decoding_iterations / successful_decoding)
 
