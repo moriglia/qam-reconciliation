@@ -7,6 +7,7 @@ if __name__=="__main__":
     import qamreconciliation as qamr
     import numpy as np
     import pandas as pd
+    import scipy as sp
     from qamreconciliation.decoder import Decoder as CyDecoder
     
     parser = argparse.ArgumentParser(
@@ -27,24 +28,20 @@ if __name__=="__main__":
     parser.add_argument("--snr", type=float, nargs=2, default=[0,5])
     parser.add_argument("--nsnr", type=int, default=11)
     parser.add_argument("--alpha", type=float, default=1.0)
+    parser.add_argument("--hard", action='store_true', default=False)
 
     args = parser.parse_args()
 
     
     edge_df = pd.read_csv(args.edgefile)
     
-    # input_error_count = [N//20,  N//25,   N//30,   N//40,   N//50,  N//60,
-    #                      N//75,  N//100,  N//120,  N//150,  N//160, N//200,
-    #                      N//600, N//1000, N//2000, N//5000, 5,      1]
-
-    # input_error_count = [N//10, N//20, N//25, N//30, N//35, N//40, N//45, N//50, N//100]
-
     EbN0dB = np.linspace(args.snr[0], args.snr[1], args.nsnr)
     
     @parfor(EbN0dB)
     def final_ber(EbN0dB_val):
 
-        sigma = np.sqrt(10**(-EbN0dB_val/10))
+        v = (10**(-EbN0dB_val/10))/2
+        vsqrt = np.sqrt(v)
         
         err_count = 0
         frame_error_count = 0
@@ -57,40 +54,72 @@ if __name__=="__main__":
         mat = qamr.Matrix(edge_df.vid[1:].to_numpy(),
                           edge_df.cid[1:].to_numpy())
         N = mat.vnum
-    
-        for wordcount in range(args.simloops):
-        
-            word = GF2.Random(N)
-            synd = mat.eval_syndrome(word)
+        K = N - mat.cnum
 
-            # rcvs = -2*np.array(word, dtype=int)+1 + sigma*np.random.randn(word.size)
-            # llr = 2*rcvs/sigma**2 * np.log2(np.e)
-            # llr = 2*np.log2(np.e)/(sigma**2) * \
-            llr = 2*args.alpha/(sigma**2) * \
-                (-2*np.array(word, dtype=np.double)+1 + \
-                 sigma*np.random.randn(word.size))
-            
-            (success, itcount, lappr_final) = dec.decode(llr, synd, args.maxiter)
-            
-            if (success):
-                decoding_iterations += itcount
-                successful_decoding += 1
-                # continue
 
-            new_errors = np.array(GF2((np.array(lappr_final[:N//2]) < 0).astype(np.ubyte)) + word[:N//2],
-                                  dtype=int).sum()
-            if (new_errors):
-                frame_error_count += 1
-                err_count += new_errors
-        
-            if (err_count >= args.minerr and wordcount > args.simloops/20):
-                print(f"[{EbN0dB_val}, iteration {wordcount}] found {err_count} errors")
-                break
+        if args.hard:
+            err_prob = 0.5*sp.special.erfc(1/(np.sqrt(2)*vsqrt))
+            LLR0 = np.log((1-err_prob)/err_prob)
+            
+            for wordcount in range(args.simloops):
+                
+                word = GF2.Random(N)
+                synd = mat.eval_syndrome(word)
+                
+                llr = LLR0 * \
+                    np.sign((1 - 2.0*np.array(word, dtype=np.double) + \
+                             vsqrt*np.random.randn(word.size)))
+                
+                (success, itcount, lappr_final) = dec.decode(llr, synd, args.maxiter)
+                
+                if (success):
+                    decoding_iterations += itcount
+                    successful_decoding += 1
+                    # continue
+                    
+                new_errors = np.array(GF2((np.array(lappr_final[:K]) < 0).astype(np.ubyte)) + word[:K],
+                                      dtype=int).sum()
+                if (new_errors):
+                    frame_error_count += 1
+                    err_count += new_errors
+                    
+                if (err_count >= args.minerr and wordcount > args.simloops/20):
+                    # print(f"[{EbN0dB_val}, iteration {wordcount}] found {err_count} errors")
+                    break
+        else:
+            for wordcount in range(args.simloops):
+                
+                word = GF2.Random(N)
+                synd = mat.eval_syndrome(word)
+                
+                # rcvs = -2*np.array(word, dtype=int)+1 + sigma*np.random.randn(word.size)
+                # llr = 2*rcvs/sigma**2 * np.log2(np.e)
+                # llr = 2*np.log2(np.e)/(sigma**2) * \
+                llr = 2*args.alpha/v * \
+                    (-2*np.array(word, dtype=np.double)+1 + \
+                     vsqrt*np.random.randn(word.size))
+                
+                (success, itcount, lappr_final) = dec.decode(llr, synd, args.maxiter)
+                
+                if (success):
+                    decoding_iterations += itcount
+                    successful_decoding += 1
+                    # continue
+                    
+                new_errors = np.array(GF2((np.array(lappr_final[:K]) < 0).astype(np.ubyte)) + word[:K],
+                                      dtype=int).sum()
+                if (new_errors):
+                    frame_error_count += 1
+                    err_count += new_errors
+                    
+                if (err_count >= args.minerr and wordcount > args.simloops/20):
+                    # print(f"[{EbN0dB_val}, iteration {wordcount}] found {err_count} errors")
+                    break
 
 
         wordcount += 1
         return (EbN0dB_val,
-                err_count           / (wordcount*(N//2)),
+                err_count           / (wordcount*K),
                 frame_error_count   / wordcount,
                 0 if (successful_decoding == 0) else decoding_iterations / successful_decoding)
 

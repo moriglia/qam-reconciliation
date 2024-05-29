@@ -23,3 +23,29 @@ cpdef unsigned char [:,:] generate_table_s_to_b(int log_order):
     res[:half_table_index,:log_order-1] = generate_table_s_to_b(log_order-1)
     res[half_table_index:,:log_order-1] = res[half_table_index-1::-1,:log_order-1]
     return res
+
+
+
+
+cpdef long [:,:] generate_error_number_table(unsigned char [:,:] s_to_b):
+    cdef long [:,:] n_err = np.empty((s_to_b.shape[0], s_to_b.shape[0]), dtype=int)
+    cdef int i, j, k, s
+
+
+    # n_err[i, j] = number of errors when a_i is received given a_j was transmitted
+    
+    for i in range(s_to_b.shape[0]):
+        for j in range(i):
+            s = 0
+            for k in range(s_to_b.shape[i]):
+                s += (s_to_b[i,k] ^ s_to_b[j,k]) & 0b1;
+            n_err[i, j] = s
+
+        n_err[i,i] = 0
+
+    for i in range(s_to_b.shape[0]):
+        for j in range(i+1, s_to_b.shape[0]):
+            n_err[i,j] = n_err[j, i]
+
+    return n_err
+

@@ -129,12 +129,12 @@ cdef class NoiseMapper:
 
         # self.__ref_delta_F_Y = self.__delta_F_Y[self.__ref_symb]
 
-        # Crate table with probabilities P{ x_hat=constellation[i] | x=constellation[j] }
+        # Crate table with probabilities P{ X_hat=a_i | X=a_j }
         self.fwrd_transition_probability = cvarray(shape=(pa.order, pa.order),
                                                    itemsize=sizeof(double),
                                                    format="d")
         tmp = __sqrt2*self.__sigma
-        for j in range(pa.order):
+        for j in range(pa.order): # Index of transmitted symbol
             # i == 0
             self.fwrd_transition_probability[j, 0] = \
                 0.5*(erf((self.thresholds[1]-self.constellation[j])/tmp) + 1)
@@ -166,17 +166,21 @@ cdef class NoiseMapper:
                                       format="d")
         cdef double __N, __D
         cdef int __mode_index
-        for j in range(pa.order):
-            for k in range(self.bit_per_symbol):
+        for j in range(pa.order): # index of transmitted symbol
+            for k in range(self.bit_per_symbol): # bit index
                 __N = 0
                 __D = 0
-                for i in range(pa.order):
-                    __mod_index = j>>k
-                    if ((__mod_index*(__mod_index + 1)) & 0b0011):
-                        __D += self.fwrd_transition_probability[i, j]
+                for i in range(pa.order): # index of symbol received by Bob
+                    __mod_index = i>>k
+                    
+                    if ((__mod_index*(__mod_index +1)) & 0b11):
+                        # __mod_index is congruent either to 1 or to 2 (mod 4)
+                        __D += self.fwrd_transition_probability[j, i]
                     else:
-                        __N += self.fwrd_transition_probability[i, j]
-                self.bare_llr_table[j,k] = log(__N) - log(__D)
+                        # __mod_index is congruent either to 0 or to 3 (mod 4)
+                        __N += self.fwrd_transition_probability[j, i]
+                # Finally for symbol a_j, the LLR of bit b_k is:
+                self.bare_llr_table[j,k] = log(__N / __D)
         return
 
 
@@ -393,15 +397,16 @@ cdef class NoiseDemapper(NoiseMapper):
             # Part III
             # Add the newly evaluated conditional probability
             # to the numerator or denominator
+            mod_index = i;
             for k in range(self.bit_per_symbol):
-                mod_index = (i>>k) & 0b11;
-                
-                if (mod_index == 1 or mod_index==2):
+                if ((mod_index * (mod_index+1)) & 0b11):
                     # mod_index is either 1 or 2
                     D[k] += self.delta_F_Y[i] / sums_i
                 else:
                     # mod_index is either 0 or 3
                     N[k] += self.delta_F_Y[i] / sums_i
+                    
+                mod_index >>= 1
             
             
 
