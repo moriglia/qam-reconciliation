@@ -55,14 +55,14 @@ matlab_ber_hard = pd.read_csv("matlab/res_0.500_50iter_hard.csv", header=None).t
 
 plt.semilogy(matlab_ber[0], matlab_ber[1], marker="o", markerfacecolor='none', linestyle="--", label="MATLAB 50 iter. soft")
 plt.semilogy(matlab_ber_hard[0], matlab_ber_hard[1], marker="o", markerfacecolor='none', linestyle="--", label="MATLAB 50 iter. hard")
-plt.semilogy(df.EbN0dB, df.ber, marker="o", label="20 iter. soft")
+plt.semilogy(df.EbN0dB, df.ber, marker="x", label="20 iter. soft")
 # plt.semilogy(dfpy.EbN0dB, dfpy.ber, marker="+", label="Python Decoder")
 # plt.semilogy(dfalpha09.EbN0dB, dfalpha09.ber, marker="o", label="$alpha=0.9$")
 # plt.semilogy(dfalpha11.EbN0dB, dfalpha11.ber, marker="o", label="$alpha=1.1$")
-plt.semilogy(snr_range, p_acceptable, linestyle=":", label="Shannon limit")
+# plt.semilogy(snr_range, p_acceptable, linestyle=":", label="Shannon limit")
 plt.semilogy(snr_range, 0.5*(1-sp.special.erf(np.sqrt(10**(snr_range/10)/2))), label="No code")
-plt.semilogy(df_info_only.EbN0dB+3, df_info_only.ber, marker="x", linestyle="--", label="Ber 50 iter. soft")
-plt.semilogy(df_info_only_hard.EbN0dB+3, df_info_only_hard.ber, marker="x", linestyle="--", label="Ber 50 iter. hard")
+plt.semilogy(df_info_only.EbN0dB+3, df_info_only.ber, marker="x", linestyle="-.", label="Ber 50 iter. soft")
+plt.semilogy(df_info_only_hard.EbN0dB+3, df_info_only_hard.ber, marker="x", linestyle="-.", label="Ber 50 iter. hard")
 
 plt.grid(True, which='both')
 plt.legend()

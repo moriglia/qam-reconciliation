@@ -325,7 +325,24 @@ cdef class NoiseDemapper(NoiseMapper):
     # Use the same __cinit__: note that, as specified
     # in the Cython documentation, __cinit__ is automatically called
     # and its argument list cannot be modified
-    
+    def __cinit__(self, PAMAlphabet pa, double noise_var):
+        cdef long i, j
+        cdef double __tmp
+        self.inf_erf_table = cvarray(shape=(pa.order, pa.order),
+                                     itemsize=sizeof(double),
+                                     format="d")
+
+        __tmp = sqrt(2*noise_var)
+        # inf_erf_table[i,j] = ERF((inf(D_i) - a_j)/(2\sigma^2))
+        for j in range(pa.order):
+            self.inf_erf_table[0, j] = -1
+            for i in range(1, pa.order):
+                self.inf_erf_table[i,j] = erf(
+                    (pa.thresholds[i]-pa.constellation[j])/__tmp
+                )
+        return
+        
+    """ Formulation 2/4 in notes """
     cpdef double [:] demap_lappr(self, double n, long j):
         """ procedure to construct the LAPPRs of the bits
         associated to a transmitted symbol
@@ -434,5 +451,212 @@ cdef class NoiseDemapper(NoiseMapper):
         for i in range(n.size):
             lappr[i*self.bit_per_symbol : (i+1)*self.bit_per_symbol] = \
                 self.demap_lappr(n[i], j[i])
+
+        return lappr
+
+
+    """ Formulation 1 in my notes """
+    cpdef double [:] demap_lappr_simplified(self, double n, long j):
+        cdef long k, i, __mod_index
+        cdef double y_hat_i
+        cdef double a_i, a_j
+        cdef double __2sigmasquare
+        
+        cdef double [:] N     = cvarray(shape=(self.bit_per_symbol,),
+                                        itemsize=sizeof(double),
+                                        format="d")
+        cdef double [:] D     = cvarray(shape=(self.bit_per_symbol,),
+                                        itemsize=sizeof(double),
+                                        format="d")
+        cdef double [:] lappr = cvarray(shape=(self.bit_per_symbol,),
+                                        itemsize=sizeof(double),
+                                        format="d")
+
+        a_j = self.constellation[j]
+        __2sigmasquare = 2*self.noise_var
+        
+        
+        for k in range(self.bit_per_symbol):
+            N[k] = 0;
+            D[k] = 0;
+
+        for i in range(self.order):
+            y_hat_i = self.g_inv(n, i)
+            __mod_index = i
+            for k in range(self.bit_per_symbol):
+                if ((__mod_index*(__mod_index+1)) & 0b11):
+                    D[k] += exp(-((y_hat_i - a_j)**2)/__2sigmasquare)
+                else:
+                    N[k] += exp(-((y_hat_i - a_j)**2)/__2sigmasquare)
+
+                __mod_index >>= 1
+
+        for k in range(self.bit_per_symbol):
+            lappr[k] = log(N[k]) - log(D[k])
+
+        return lappr
+
+
+            
+    cpdef double [:] demap_lappr_simplified_array(self, double [:] n, long [:] j):
+        cdef double [:] lappr
+        cdef int i
+        
+        if (n.size != j.size):
+            raise ValueError("Sizes of transformed noise vector and tx symbols do not match")
+
+        lappr = cvarray(shape=(n.size*self.bit_per_symbol,),
+                        itemsize=sizeof(double),
+                        format="d")
+
+        for i in range(n.size):
+            lappr[i*self.bit_per_symbol : (i+1)*self.bit_per_symbol] = \
+                self.demap_lappr_simplified(n[i], j[i])
+
+        return lappr
+
+
+    """ Formulation 3 in my notes """
+    cpdef double [:] demap_lappr_sofisticated(self, double n, long j):
+        cdef long i, m, l, __mod_index
+        cdef double [:] y_hat = cvarray(shape=(self.order,),
+                                        itemsize=sizeof(double),
+                                        format="d")
+        cdef double e_coeff, __2sigmasquare, __sqrt2sigma, a_j, A
+        cdef double S_zj, B_j
+        cdef double [:] beta = cvarray(shape=(self.order,),
+                                       itemsize=sizeof(double),
+                                       format="d")
+        cdef double [:] delta_F_Z = cvarray(shape=(self.order,),
+                                            itemsize=sizeof(double),
+                                            format="d")
+        # cdef double [:] delta_bottom_up = cvarray(shape=(self.order-1,),
+        #                                           itemsize=sizeof(double),
+        #                                           format="d")
+        # cdef double [:] delta_top_down = cvarray(shape=(self.order-1,),
+        #                                          itemsize=sizeof(double),
+        #                                          format="d")
+        cdef double [:] lappr = cvarray(shape=(self.bit_per_symbol,),
+                                        itemsize=sizeof(double),
+                                        format="d")
+        cdef double [:] N = cvarray(shape=(self.bit_per_symbol,),
+                                    itemsize=sizeof(double),
+                                    format="d")
+        cdef double [:] D = cvarray(shape=(self.bit_per_symbol,),
+                                    itemsize=sizeof(double),
+                                    format="d")
+        
+        """ Part 1: Hypotetical samples re-construction """
+        for i in range(self.order):
+            y_hat[i] = self.g_inv(n, j) # Hypotetical sample
+
+        """ Part 2: Coefficient list re-construction """
+        __2sigmasquare = 2*self.noise_var
+        __sqrt2sigma = sqrt(__2sigmasquare)
+        a_j = self.constellation[j]
+        S_zj = 0
+        B_j = 0
+        for i in range(self.order):
+            """ Part 2A: Exponential coefficients weighted sum """
+            e_coeff = self.probabilities[j]
+            for m in range(j):
+                e_coeff += self.probabilities[m] * exp(
+                    (2*y_hat[i] - self.constellation[m]-a_j) * \
+                    (self.constellation[m]-a_j) / __2sigmasquare
+                )
+            for m in range(j+1, self.order):
+                e_coeff += self.probabilities[m] * exp(
+                    (2*y_hat[i] - self.constellation[m]-self.constellation[j]) * \
+                    (self.constellation[m] - a_j) / __2sigmasquare
+                )
+                
+            """ Part 2B: beta coefficients calculation """
+            beta[i] = self.delta_F_Y[i] / e_coeff
+            B_j += beta[i]
+            
+            """ Part 2C: delta F_Z coefficients """
+            delta_F_Z[i] = 0.5*(erf((y_hat[i] - a_j) / __sqrt2sigma) - self.inf_erf_table[i,j])
+            S_zj += delta_F_Z[i]
+
+        # """ Part 3: Auxiliary sum of Cryptic difference coefficients:
+        # Part 3A: bottom differences partial sum
+        # Part 3B: top differences partial sum
+        # """
+        # # Part 3A: Note that delta_bottom_up is defined for i=0, ..., M-2
+        # delta_bottom_up[0] = delta_F_Z[0] - beta[0]
+        # for i in range(1, self.order - 1):
+        #     delta_bottom_up[i] = delta_F_Z[i] - beta[i] + delta_bottom_up[i-1]
+
+        # """ Part 3B:
+        # Note that delta_top_down is formally defined for i=1, ..., M-1,
+        # but for the sake of the algorithm we re-map it to the range: i=0,...,M-2 """
+        # delta_top_down[self.order-2] = delta_F_Z[self.order-2] - beta[self.order-2]
+        # for i in range(self.order-3, -1, -1):
+        #     delta_top_down[i] = delta_top_down[i+1] + delta_F_Z[i] - beta[i]
+
+        """ Part 4: LAPPR construction """
+        # for l in range(self.bit_per_symbol-1):
+        #     # N[l] is initialized by the the edge case i == 0
+        #     D[l] = 0
+        #     # D[log2(M)-1] is initialized by the edge case i == M-1
+
+        # # Edge case i == 0
+        # A = beta[0]*delta_F_Z[0]*delta_top_down[0]
+        # for l in range(self.bit_per_symbol):
+        #     N[l] = A
+
+        # # Edge case i == M-1
+        # A = beta[self.order-1] * delta_F_Z[self.order-1] * delta_bottom_up[self.order-2]
+        # for l in range(self.bit_per_symbol-1):
+        #     N[l] += A
+        # D[self.bit_per_symbol-1] = A
+
+        # # Ordinary cases
+        # for i in range(1, self.order-1):
+        #     A = beta[i]*delta_F_Z[i]*(delta_bottom_up[i-1] + delta_top_down[i])
+        #     __mod_index = i
+        #     for l in range(self.bit_per_symbol):
+        #         if ((__mod_index*(__mod_index+1)) & 0b11):
+        #             D[l] += A
+        #         else:
+        #             N[l] += A
+        #         __mod_index >>= 1
+
+        for l in range(self.bit_per_symbol):
+            D[l] = 0
+            N[l] = 0
+            
+        for i in range(self.order):
+            A = beta[i]*S_zj - delta_F_Z[i]*B_j
+            __mod_index = i
+            for l in range(self.bit_per_symbol):
+                if ((__mod_index*(__mod_index+1)) & 0b11):
+                    D[l] += A
+                else:
+                    N[l] += A
+                __mod_index >>= 1
+
+        # LAPPRs
+        for l in range(self.bit_per_symbol):
+            lappr[l] = log(N[l]) - log(D[l])
+
+        return lappr
+
+        
+
+    cpdef double [:] demap_lappr_sofisticated_array(self, double [:] n, long [:] j):
+        cdef double [:] lappr
+        cdef int i
+        
+        if (n.size != j.size):
+            raise ValueError("Sizes of transformed noise vector and tx symbols do not match")
+
+        lappr = cvarray(shape=(n.size*self.bit_per_symbol,),
+                        itemsize=sizeof(double),
+                        format="d")
+
+        for i in range(n.size):
+            lappr[i*self.bit_per_symbol : (i+1)*self.bit_per_symbol] = \
+                self.demap_lappr_sofisticated(n[i], j[i])
 
         return lappr

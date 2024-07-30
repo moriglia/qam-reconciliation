@@ -54,5 +54,15 @@ cdef class NoiseMapper:
 
 
 cdef class NoiseDemapper(NoiseMapper):
+    cdef readonly double [:,:] inf_erf_table
+    
     cpdef double [:] demap_lappr(self, double n, long j)
     cpdef double [:] demap_lappr_array(self, double [:] n, long [:] j)
+
+    cpdef double [:] demap_lappr_simplified(self, double n, long j)
+    cpdef double [:] demap_lappr_simplified_array(self, double [:] n, long [:] j)
+    
+
+    cpdef double [:] demap_lappr_sofisticated(self, double n, long j)
+    cpdef double [:] demap_lappr_sofisticated_array(self, double [:] n, long [:] j)
+    
