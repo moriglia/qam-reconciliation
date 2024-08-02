@@ -3,7 +3,8 @@ import numpy as np
 # from galois import GF2
 from . cimport bicm
 from cython.view cimport array as cvarray
-
+cimport cython
+from libc.stdlib cimport malloc, free
 
 
 
@@ -60,33 +61,57 @@ cdef class PAMAlphabet(Alphabet):
         return
 
 
-    cpdef long [:] random_symbols(self, int N):
-        return np.array(
-            np.random.choice(self.order, size=N, p=self.probabilities),
-            dtype=int
-        )
+    cdef long [:] _random_symbols(self, int N) nogil:
+        with gil:
+            return np.array(
+                np.random.choice(self.order, size=N, p=self.probabilities),
+                dtype=int
+            )
 
 
-    cpdef double [:] index_to_value(self, long [:] index):
-        cdef int i
-        cdef double [:] vals = cvarray(shape=(index.size,),
-                                       itemsize=sizeof(double),
-                                       format="d")
+    cdef double [:] _index_to_value(self, long [:] index) nogil:
+        cdef int i, s
+        cdef double * vals
+        s = len(index)
+        vals = <double*> malloc(sizeof(double) * s)
+        if not vals:
+            raise MemoryError()
+        # cvarray(shape=(s,),
+        #                itemsize=sizeof(double),
+        #                format="d")
         
-        for i in range(index.size):
-            vals[i] = self.constellation[index[i]]
-
+        with cython.boundscheck(False):
+            for i in range(s):
+                vals[i] = self.constellation[index[i]]
+                
         return vals
 
 
-    cpdef unsigned char [:] demap_symbols_to_bits(self, long [:] symbol_index):
-        cdef long i
-        cdef unsigned char [:] bit_array = cvarray(shape=(symbol_index.size*self.bit_per_symbol,),
-                                                   itemsize=sizeof(unsigned char),
-                                                   format="c")
-
-        for i  in range(symbol_index.size):
-            bit_array[i*self.bit_per_symbol:(i+1)*self.bit_per_symbol] = self.s_to_b[symbol_index[i]]
-
+    cdef unsigned char [:] _demap_symbols_to_bits(self, long [:] symbol_index) nogil:
+        cdef long i, s
+        cdef unsigned char [:] bit_array
+        s = len(symbol_index)
+        with gil, cython.boundscheck(False):
+            bit_array = cvarray(shape=(s*self.bit_per_symbol,),
+                                itemsize=sizeof(unsigned char),
+                                format="c")
+            for i in range(s):
+                bit_array[i*self.bit_per_symbol:(i+1)*self.bit_per_symbol] = self.s_to_b[symbol_index[i]]
+                
         return bit_array
         
+
+
+    cpdef long [:] random_symbols(self, int N):
+        return self._random_symbols(N)
+
+    
+    cpdef double [:] index_to_value(self, long [:] index):
+        return self._index_to_value(index)
+
+
+    cpdef unsigned char [:] demap_symbols_to_bits(self, long [:] symbol_index):
+        return self._demap_symbols_to_bits(symbol_index)
+
+
+    

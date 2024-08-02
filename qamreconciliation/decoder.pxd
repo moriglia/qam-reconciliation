@@ -1,3 +1,12 @@
+cdef class DecodingResult:
+    cdef readonly:
+        unsigned char success
+        long iter_number
+        double [:] llr
+        
+        
+
+
 cdef class Decoder:
     cdef:
         long __chk_num, __var_num, __edge_num
@@ -57,7 +66,7 @@ cdef class Decoder:
                                   double [:] check_to_var,
                                   double [:] var_to_check)
 
-    cpdef tuple decode(self,
+    cpdef DecodingResult decode(self,
                        double [:] lappr_data,
                        unsigned char [:] synd,
                        int max_iterations)

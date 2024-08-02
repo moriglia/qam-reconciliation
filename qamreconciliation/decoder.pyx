@@ -6,6 +6,18 @@ import numpy as np
 from libc.math cimport exp as cexp, log as cln, abs as cabs
 
 
+cdef class DecodingResult:
+    def __cinit__(self,
+                  unsigned char success,
+                  long iter_number,
+                  double [:] llr):
+        self.success = success
+        self.iter_number = iter_number,
+        self.llr = llr
+        return
+
+    
+
 cdef inline int __sgn(double x) nogil:
     return (0.0 < x) - (x < 0.0)
 
@@ -363,7 +375,7 @@ cdef class Decoder:
         return
     
         
-    cpdef tuple decode(self,
+    cpdef DecodingResult decode(self,
                        double [:] lappr_data,
                        unsigned char [:] synd,
                        int max_iterations):
@@ -371,7 +383,7 @@ cdef class Decoder:
         cdef long iter_index, c, v, e
         
         if (self.check_lappr(lappr_data, synd)):
-            return (True, 0, lappr_data)
+            return DecodingResult(True, 0, lappr_data)
 
         #self.__alloc_messages()
         self.__check_to_var  = np.zeros(self.__edge_num, dtype=np.double)
@@ -401,9 +413,9 @@ cdef class Decoder:
                 self.__process_var_node(v)
                 
             if (self.__check_lappr()):
-                return (True, iter_index+1, self.__updated_lappr)
+                return DecodingResult(True, iter_index+1, self.__updated_lappr)
 
-        return (False, max_iterations, self.__updated_lappr)
+            return DecodingResult(False, max_iterations, self.__updated_lappr)
 
 
     

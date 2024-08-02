@@ -1,10 +1,10 @@
 cdef class Matrix:
-    cdef:
-        long [:] __vnode_arr
-        long [:] __cnode_arr
-        int __vnode_num
-        int __cnode_num
-        int __edge_num
+    cdef readonly:
+        long [:] vnode_arr
+        long [:] cnode_arr
+        int vnode_num
+        int cnode_num
+        int edge_num
 
     cpdef unsigned char [:] eval_syndrome(
         self,

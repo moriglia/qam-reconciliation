@@ -94,6 +94,7 @@ cdef class NoiseMapper:
         
         # Alphabet internals
         self.order = pa.order
+        self.half_order = pa.order >> 1
         self.bit_per_symbol = pa.bit_per_symbol
         self.constellation = pa.constellation
         self.variance = pa.variance
@@ -181,6 +182,21 @@ cdef class NoiseMapper:
                         __N += self.fwrd_transition_probability[j, i]
                 # Finally for symbol a_j, the LLR of bit b_k is:
                 self.bare_llr_table[j,k] = log(__N / __D)
+
+
+        self.inf_erf_table = cvarray(shape=(pa.order, pa.order),
+                                     itemsize=sizeof(double),
+                                     format="d")
+
+        
+        # inf_erf_table[i,j] = ERF((inf(D_i) - a_j)/(2\sigma^2))
+        tmp = __sqrt2*self.__sigma
+        for j in range(pa.order):
+            self.inf_erf_table[0, j] = -1
+            for i in range(1, pa.order):
+                self.inf_erf_table[i,j] = erf(
+                    (pa.thresholds[i]-pa.constellation[j])/tmp
+                )
         return
 
 
@@ -315,32 +331,21 @@ cdef class NoiseMapper:
             llr[i*self.bit_per_symbol : (i+1)*self.bit_per_symbol] = self.bare_llr_table[symb[i],:]
 
         return llr
-        
-
-
     
-
-cdef class NoiseDemapper(NoiseMapper):
-
-    # Use the same __cinit__: note that, as specified
-    # in the Cython documentation, __cinit__ is automatically called
-    # and its argument list cannot be modified
-    def __cinit__(self, PAMAlphabet pa, double noise_var):
-        cdef long i, j
-        cdef double __tmp
-        self.inf_erf_table = cvarray(shape=(pa.order, pa.order),
-                                     itemsize=sizeof(double),
-                                     format="d")
-
-        __tmp = sqrt(2*noise_var)
-        # inf_erf_table[i,j] = ERF((inf(D_i) - a_j)/(2\sigma^2))
-        for j in range(pa.order):
-            self.inf_erf_table[0, j] = -1
-            for i in range(1, pa.order):
-                self.inf_erf_table[i,j] = erf(
-                    (pa.thresholds[i]-pa.constellation[j])/__tmp
-                )
-        return
+    
+    
+    
+    
+# cdef class NoiseDemapper(NoiseMapper):
+#     pass
+#     # Use the same __cinit__: note that, as specified
+#     # in the Cython documentation, __cinit__ is automatically called
+#     # and its argument list cannot be modified
+#     # def __cinit__(self, PAMAlphabet pa, double noise_var):
+#     #     cdef long i, j
+#     #     cdef double __tmp
+        
+#     #     return
         
     """ Formulation 2/4 in notes """
     cpdef double [:] demap_lappr(self, double n, long j):
@@ -660,3 +665,32 @@ cdef class NoiseDemapper(NoiseMapper):
                 self.demap_lappr_sofisticated(n[i], j[i])
 
         return lappr
+
+
+
+
+
+
+
+
+cdef class NoiseMapperFlipSign(NoiseMapper):
+    cdef double g(self, double y, int i):
+        if (i<self.half_order):
+            # return self.g(-y, self.order - 1 - i)
+            return (self.F_Y_thresholds[i+1] - self.__single_F_Y(y))/self.delta_F_Y[i]
+        return (self.__single_F_Y(y) - self.F_Y_thresholds[i])/self.delta_F_Y[i]
+
+    
+    cdef double g_inv(self, double n_hat, int i):
+        """ Note that this returns y_hat and not z_hat """
+        if (i<self.half_order):
+            return __interp(
+                self.__F_Y,
+                self.__y_range,
+                self.F_Y_thresholds[i+1] - n_hat * self.delta_F_Y[i]
+            )
+        return __interp(
+            self.__F_Y,
+            self.__y_range,
+            n_hat * self.delta_F_Y[i] + self.F_Y_thresholds[i]
+        )
