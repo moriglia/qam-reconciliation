@@ -5,6 +5,7 @@ cdef class NoiseMapper:
         double [:] thresholds
         double [:] F_Y_thresholds
         int order
+        int half_order
         int bit_per_symbol
         double [:] constellation
         double variance
@@ -13,15 +14,16 @@ cdef class NoiseMapper:
         double [:] probabilities
         double noise_var
         double [:,:] bare_llr_table
+        double [:,:] inf_erf_table
         
     cdef:
         double __sigma
         
         double __y_low
         double __y_high
-        double [:] __y_range
+        double [:] _y_range
         int __n_points
-        double [:] __F_Y
+        double [:] _F_Y
         double [:] delta_F_Y
 
 
@@ -33,7 +35,7 @@ cdef class NoiseMapper:
 
     cpdef double [:] F_Y(self, double [:] y)
 
-    cdef double __single_F_Y(self, double y)
+    cdef double _single_F_Y(self, double y)
 
     cdef double g(self, double y, int i)
 
@@ -49,20 +51,26 @@ cdef class NoiseMapper:
 
     cpdef double [:] bare_llr(self, long [:] symb)
 
-
-
-
-
-cdef class NoiseDemapper(NoiseMapper):
-    cdef readonly double [:,:] inf_erf_table
-    
+    # LLR construction functions
     cpdef double [:] demap_lappr(self, double n, long j)
     cpdef double [:] demap_lappr_array(self, double [:] n, long [:] j)
 
     cpdef double [:] demap_lappr_simplified(self, double n, long j)
     cpdef double [:] demap_lappr_simplified_array(self, double [:] n, long [:] j)
     
-
     cpdef double [:] demap_lappr_sofisticated(self, double n, long j)
     cpdef double [:] demap_lappr_sofisticated_array(self, double [:] n, long [:] j)
     
+
+
+
+
+cdef class NoiseDemapper(NoiseMapper):
+    # Keep for compatibility with simulations
+    # Functionalities moved to NoiseMapper
+    pass
+
+
+
+cdef class NoiseMapperFlipSign(NoiseMapper):
+    pass
