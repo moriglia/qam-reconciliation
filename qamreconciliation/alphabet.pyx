@@ -26,6 +26,7 @@ cdef class PAMAlphabet(Alphabet):
 
         self.bit_per_symbol = bit_per_symbol
         self.order = 1<<bit_per_symbol
+        self.step = step
 
         if probabilities is None:
             self.probabilities = np.ones(self.order, dtype=np.double)/self.order

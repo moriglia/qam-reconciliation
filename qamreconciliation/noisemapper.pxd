@@ -13,8 +13,11 @@ cdef class NoiseMapper:
         double [:,:] fwrd_transition_probability
         double [:] probabilities
         double noise_var
+        double noise_sigma
         double [:,:] bare_llr_table
         double [:,:] inf_erf_table
+        double [:] delta_F_Y
+        unsigned char [:] sign_config
         
     cdef:
         double __sigma
@@ -24,7 +27,6 @@ cdef class NoiseMapper:
         double [:] _y_range
         int __n_points
         double [:] _F_Y
-        double [:] delta_F_Y
 
 
         int __ref_symb
@@ -37,9 +39,11 @@ cdef class NoiseMapper:
 
     cdef double _single_F_Y(self, double y)
 
-    cdef double g(self, double y, int i)
+    cpdef double g(self, double y, int i)
 
-    cdef double g_inv(self, double n_hat, int i)
+    cpdef double g_inv(self, double n_hat, int i)
+
+    cpdef double g_inv_search(self, double n_hat, int i, double y_accuracy=*)
 
     cpdef long [:] hard_decide_index(self, double [:] y_samples)
 
@@ -48,6 +52,8 @@ cdef class NoiseMapper:
     cpdef double [:] map_noise(self, double [:] y_samples, long [:] index)
 
     cpdef double [:] demap_noise(self, double [:] n_hat, long [:] symb)
+
+    cpdef double [:] demap_noise_search(self, double [:] n_hat, long [:] symb, double y_accuracy=*)
 
     cpdef double [:] bare_llr(self, long [:] symb)
 
@@ -73,4 +79,8 @@ cdef class NoiseDemapper(NoiseMapper):
 
 
 cdef class NoiseMapperFlipSign(NoiseMapper):
+    pass
+
+
+cdef class NoiseMapperAntiFlipSign(NoiseMapper):
     pass

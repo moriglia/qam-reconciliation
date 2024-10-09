@@ -7,6 +7,7 @@ cdef class Alphabet:
         double [:] thresholds
         double variance
         int order
+        double step
     
 
 

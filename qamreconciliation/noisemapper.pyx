@@ -3,7 +3,7 @@ import scipy as sp
 cimport numpy as np
 import numpy as np
 from cython.view cimport array as cvarray
-from libc.math cimport sqrt, erf, exp, log
+from libc.math cimport sqrt, erf, exp, log, ceil
 
 
 cdef double __sqrt2 = sqrt(2)
@@ -85,12 +85,24 @@ cpdef double[:] __view_dist_cut(double [:] x):
 
 
 cdef class NoiseMapper:
-    def __cinit__(self, PAMAlphabet pa, double noise_var):
+    def __cinit__(self, PAMAlphabet pa,
+                  double noise_var,
+                  unsigned char [:] sign_config = None,
+                  double trunkation_threshold=1e-21,
+                  long n_intervals_per_step=1000):
         cdef int i, j, k
         cdef double tmp
         
         if (noise_var <= 0):
             raise ValueError(f"noise variance must be strictly positive, got {noise_var}")
+
+
+        if (sign_config is None):
+            self.sign_config = np.zeros(pa.order, dtype=np.uint8)
+        else:
+            self.sign_config = sign_config
+            if (self.sign_config.size < pa.order):
+                raise ValueError("Not enough data for a monotonicity sign configuration")
         
         # Alphabet internals
         self.order = pa.order
@@ -103,10 +115,16 @@ cdef class NoiseMapper:
         
         self.noise_var = noise_var
         self.__sigma = sqrt(noise_var)
+        self.noise_sigma = self.__sigma # just a readonly alias, to edit less code :P
 
-        self.__y_low = pa.constellation[0]*3
-        self.__y_high= pa.constellation[-1]*3
-        self.__n_points = 10000      
+        if (trunkation_threshold > 1.):
+            self.__y_low = pa.constellation[0]*10
+            self.__y_high= pa.constellation[-1]*10
+        else:
+            tmp = sqrt(-2.*log(trunkation_threshold))*self.__sigma
+            self.__y_high= pa.constellation[-1] + tmp
+            self.__y_low = pa.constellation[0]  - tmp
+        self.__n_points = <int>ceil((self.__y_high - self.__y_low)*n_intervals_per_step/pa.step) + 1
         self._y_range = np.linspace(self.__y_low, self.__y_high, self.__n_points)
         self._F_Y = self.F_Y(self._y_range)
         
@@ -130,7 +148,7 @@ cdef class NoiseMapper:
 
         # self.__ref_delta_F_Y = self.__delta_F_Y[self.__ref_symb]
 
-        # Crate table with probabilities P{ X_hat=a_i | X=a_j }
+        # Crate table with probabilities self.fwrd_transition_probability[j,i] = P{ X_hat=a_i | X=a_j }
         self.fwrd_transition_probability = cvarray(shape=(pa.order, pa.order),
                                                    itemsize=sizeof(double),
                                                    format="d")
@@ -148,7 +166,7 @@ cdef class NoiseMapper:
                     0.5*(erf((self.thresholds[i+1]-self.constellation[j])/tmp) - \
                          erf((self.thresholds[i]-self.constellation[j])/tmp))
 
-        # Crate table with probabilities P{ x=constellation[j] | x_hat=constellation[i] }
+        # Crate table with probabilities back_transition_probability[i, j] = P{ x=constellation[j] | x_hat=constellation[i] }
         self.back_transition_probability = cvarray(shape=(pa.order, pa.order),
                                                    itemsize=sizeof(double),
                                                    format="d")
@@ -181,7 +199,10 @@ cdef class NoiseMapper:
                         # __mod_index is congruent either to 0 or to 3 (mod 4)
                         __N += self.fwrd_transition_probability[j, i]
                 # Finally for symbol a_j, the LLR of bit b_k is:
-                self.bare_llr_table[j,k] = log(__N / __D)
+                if (__D == 0):
+                    self.bare_llr_table[j,k] = 1e300
+                else:
+                    self.bare_llr_table[j,k] = log(__N / __D)
 
 
         self.inf_erf_table = cvarray(shape=(pa.order, pa.order),
@@ -250,17 +271,64 @@ cdef class NoiseMapper:
         return res
 
 
-    cdef double g(self, double y, int i):
+    cpdef double g(self, double y, int i):
+        if (self.sign_config[i]):
+            return (self.F_Y_thresholds[i+1] - self._single_F_Y(y))/self.delta_F_Y[i]
         return (self._single_F_Y(y) - self.F_Y_thresholds[i])/self.delta_F_Y[i]
 
     
-    cdef double g_inv(self, double n_hat, int i):
+    cpdef double g_inv(self, double n_hat, int i):
         """ Note that this returns y_hat and not z_hat """
+        if (self.sign_config[i]):
+            return __interp(
+                self._F_Y,
+                self._y_range,
+                self.F_Y_thresholds[i+1] - n_hat * self.delta_F_Y[i]
+            )
         return __interp(
             self._F_Y,
             self._y_range,
             n_hat * self.delta_F_Y[i] + self.F_Y_thresholds[i]
         )
+
+
+    cpdef double g_inv_search(self, double n_hat, int i, double y_accuracy = 1e-9):
+        cdef double F_target, F_value, y_try, y_lower_bound, y_upper_bound
+        cdef unsigned char upper_search_bound_found, lower_search_bound_found
+        
+        if (self.sign_config[i]):
+            F_target = self.F_Y_thresholds[i+1] - n_hat * self.delta_F_Y[i]
+        else:
+            F_target = n_hat * self.delta_F_Y[i] + self.F_Y_thresholds[i]
+
+        if (F_target > .5):
+            y_upper_bound = 1
+            y_lower_bound = 0
+            F_value = self._single_F_Y(y_upper_bound)
+            while(F_value < F_target):
+                y_lower_bound  = y_upper_bound
+                y_upper_bound *= 2.
+                F_value = self._single_F_Y(y_upper_bound)
+        else:
+            y_lower_bound = -1
+            y_upper_bound =  0
+            F_value = self._single_F_Y(y_lower_bound)
+            while(F_value > F_target):
+                y_upper_bound  = y_lower_bound
+                y_lower_bound *= 2.
+                F_value = self._single_F_Y(y_lower_bound)
+
+        while((y_upper_bound - y_lower_bound) > y_accuracy):
+            y_try = (y_upper_bound + y_lower_bound)/2
+            F_value = self._single_F_Y(y_try)
+            if (F_value > F_target):
+                y_upper_bound = y_try
+            else:
+                y_lower_bound = y_try
+
+        y_try = (y_upper_bound + y_lower_bound)/2
+        return y_try
+        
 
 
     cpdef long [:] hard_decide_index (self, double [:] y_samples):
@@ -316,7 +384,23 @@ cdef class NoiseMapper:
                         format="d")
 
         for i in range(n_hat.size):
-            y_hat[i] = self.__g_inv(n_hat[i], symb[i])
+            y_hat[i] = self.g_inv(n_hat[i], symb[i])
+        return y_hat
+
+
+
+    cpdef double [:] demap_noise_search(self, double [:] n_hat, long [:] symb, double y_accuracy=1e-9):
+        cdef double [:] y_hat
+        cdef int i
+        if (n_hat.size != symb.size):
+            raise ValueError("Sizes do not match")
+
+        y_hat = cvarray(shape=(n_hat.size,),
+                        itemsize=sizeof(double),
+                        format="d")
+
+        for i in range(n_hat.size):
+            y_hat[i] = self.g_inv_search(n_hat[i], symb[i], y_accuracy)
         return y_hat
 
 
@@ -674,14 +758,14 @@ cdef class NoiseMapper:
 
 
 cdef class NoiseMapperFlipSign(NoiseMapper):
-    cdef double g(self, double y, int i):
+    cpdef double g(self, double y, int i):
         if (i<self.half_order):
             # return self.g(-y, self.order - 1 - i)
             return (self.F_Y_thresholds[i+1] - self._single_F_Y(y))/self.delta_F_Y[i]
         return (self._single_F_Y(y) - self.F_Y_thresholds[i])/self.delta_F_Y[i]
 
     
-    cdef double g_inv(self, double n_hat, int i):
+    cpdef double g_inv(self, double n_hat, int i):
         """ Note that this returns y_hat and not z_hat """
         if (i<self.half_order):
             return __interp(
@@ -693,4 +777,25 @@ cdef class NoiseMapperFlipSign(NoiseMapper):
             self._F_Y,
             self._y_range,
             n_hat * self.delta_F_Y[i] + self.F_Y_thresholds[i]
+        )
+
+
+cdef class NoiseMapperAntiFlipSign(NoiseMapper):
+    cpdef double g(self, double y, int i):
+        if (i<self.half_order):        
+            return (self._single_F_Y(y) - self.F_Y_thresholds[i])/self.delta_F_Y[i]
+        return (self.F_Y_thresholds[i+1] - self._single_F_Y(y))/self.delta_F_Y[i]
+    
+    cpdef double g_inv(self, double n_hat, int i):
+        """ Note that this returns y_hat and not z_hat """
+        if (i<self.half_order):
+            return __interp(
+                self._F_Y,
+                self._y_range,
+                n_hat * self.delta_F_Y[i] + self.F_Y_thresholds[i]
+            )
+        return __interp(
+            self._F_Y,
+            self._y_range,
+            self.F_Y_thresholds[i+1] - n_hat * self.delta_F_Y[i]
         )
