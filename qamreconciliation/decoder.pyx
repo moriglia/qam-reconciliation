@@ -4,16 +4,25 @@ cimport numpy as np
 import numpy as np
 #from cython.view cimport array as cvarray
 from libc.math cimport exp as cexp, log as cln, abs as cabs
+from cython.parallel cimport prange
+
+
+cdef struct decoderResult:
+    unsigned char   success
+    int             iterations
+    double        * final_lappr
+    long            final_lappr_size
 
 
 cdef inline int __sgn(double x) nogil:
     return (0.0 < x) - (x < 0.0)
 
 
-# cdef inline void __free_array(void* arr):
-#     if arr:
-#         free(arr)
-#     return
+cdef inline double __box_plus(double a, double b) nogil:
+    return __sgn(a) * __sgn(b)\
+        * min(cabs(a), cabs(b)) \
+        + cln(1+cexp(-cabs(a + b))) \
+        - cln(1+cexp(-cabs(a - b)))
 
 
 cdef void __free_table(long** table, long tsize) noexcept nogil:
@@ -101,7 +110,7 @@ cdef class Decoder:
 
         self.__var_to_check = None
         self.__check_to_var = None
-        self.__updated_lappr= None
+        self.__updated_lappr= NULL
         return
 
     
@@ -110,38 +119,6 @@ cdef class Decoder:
         __free_table(self.__c_to_e, self.__chk_num)
         __free_table(self.__c_to_v, self.__chk_num)
         return
-
-
-    # cdef void __alloc_messages(self):
-    #     if self.__var_to_check is None:
-    #         self.__var_to_check = <double[:self.__edge_num]>malloc(
-    #             self.__edge_num*sizeof(double))
-    #         if self.__var_to_check is None:
-    #             raise MemoryError()
-    #     if self.__check_to_var is None:
-    #         self.__check_to_var = <double[:self.__edge_num]>malloc(
-    #             self.__edge_num*sizeof(double))
-    #         if self.__check_to_var is None:
-    #             self.__free_messages()
-    #             raise MemoryError()
-    #     if self.__updated_lappr is None:
-    #         self.__updated_lappr = <double[:self.__var_num]>malloc(
-    #             self.__var_num*sizeof(double))
-    #         if self.__updated_lappr is None:
-    #             self.__free_messages()
-    #             raise MemoryError()
-    #     return
-
-    
-    # cdef void __free_messages(self):
-    #     __free_array(<void*>self.__var_to_check)
-    #     __free_array(<void*>self.__check_to_var)
-    #     __free_array(<void*>self.__updated_lappr)
-    #     self.__var_to_check  = None
-    #     self.__check_to_var  = None
-    #     self.__updated_lappr = None
-    #     return
-
 
     
     @property
@@ -165,21 +142,16 @@ cdef class Decoder:
 
     """ Syndrome checking functions """    
     cdef unsigned char __check_synd_node(self, long check_node_index) noexcept nogil:
-        # cdef long * index_set
         cdef long * vnode_set
         cdef int i
-        # cdef unsigned char parity = self.__synd[check_node_index]
         cdef unsigned char parity
         with cython.boundscheck(False):
             parity = self.__synd[check_node_index]
 
-        # index_set = self.__c_to_e[check_node_index]
         vnode_set = self.__c_to_v[check_node_index]
-        # for i in range(1, index_set[0]+1):
         with cython.boundscheck(False):
             for i in range(1, vnode_set[0]+1):
                 # toggle parity every time the word bit is 1
-                # parity ^= self.__word[self.__e_to_v[index_set[i]]]
                 parity ^= self.__word[vnode_set[i]]
         return parity ^ 0b1
 
@@ -231,9 +203,7 @@ cdef class Decoder:
             
     cdef unsigned char __check_lappr_node(self, long check_node_index) noexcept nogil:
         cdef int i
-        # cdef long * index_set = self.__c_to_e[check_node_index]
         cdef long * vnode_set = self.__c_to_v[check_node_index]
-        # cdef unsigned char parity = self.__synd[check_node_index]
         cdef unsigned char parity
         
         with cython.boundscheck(False):
@@ -241,7 +211,6 @@ cdef class Decoder:
             
             # for i in range(1, index_set[0]+1):
             for i in range(1, vnode_set[0]+1):
-                # if (self.__updated_lappr[self.__e_to_v[index_set[i]]] < 0):
                 if (self.__updated_lappr[vnode_set[i]] < 0):
                     # toggle parity every time a negative lappr is met
                     parity ^= 0b1
@@ -249,7 +218,7 @@ cdef class Decoder:
         return parity ^ 0b1
 
 
-    cdef unsigned char __check_lappr(self) nogil:
+    cdef unsigned char __check_lappr(self) noexcept nogil:
         cdef long i
 
         for i in range(self.__chk_num):
@@ -270,22 +239,22 @@ cdef class Decoder:
             raise ValueError("Size of synd does not match number of cnodes")
         
         
-        self.__updated_lappr = lappr
+        self.__updated_lappr = &lappr[0]
         self.__synd = synd
 
         res = self.__check_lappr()
 
         self.__word = None
         self.__synd = None
+        self.__updated_lappr = NULL
 
         return res
     
 
     """ Message passing processing functions """
-    cdef void __process_var_node(self, long node_index) nogil:
+    cdef void __process_var_node(self, long node_index) noexcept nogil:
         cdef long* index_set
         cdef int i
-        # index_set = np.array(self.edges.eid[self.edges.vid==node_index])
         index_set = self.__v_to_e[node_index]
 
         with cython.boundscheck(False):
@@ -308,103 +277,162 @@ cdef class Decoder:
         self.__lappr_data = lappr_data
         self.__check_to_var = check_to_var
         self.__var_to_check = var_to_check
-        self.__updated_lappr = updated_lappr
+        self.__updated_lappr = &updated_lappr[0]
         
         self.__process_var_node(node_index)
 
         self.__lappr_data    = None
         self.__check_to_var  = None
         self.__var_to_check  = None
-        self.__updated_lappr = None
+        self.__updated_lappr = NULL
 
         return
 
             
-    cdef void __process_check_node(self, long node_index) nogil:
+    cdef int __process_check_node(self, long node_index) noexcept nogil:
         cdef long* index_set
         cdef double prefactor
         cdef int i, j
+        cdef long N_vn
         cdef double _atanh, _msg
-
+        cdef double * F
+        cdef double * B
+        
         index_set = self.__c_to_e[node_index]
+        N_vn = index_set[0]
+        index_set+=1
+        F = <double*>malloc((N_vn-1)*sizeof(double)*2)
+        if F is NULL:
+            return 1
 
         with cython.boundscheck(False):
-            prefactor = -2.0 if self.__synd[node_index] else 2.0
-            for i in range(1, index_set[0]+1):
-                _atanh = 1e300 #should be large enough
-                
-                for j in range(1, index_set[0]+1):
-                    if (i!=j):
-                        _msg = self.__var_to_check[index_set[j]]
-                        _atanh = __sgn(_atanh)*__sgn(_msg) * \
-                            min(cabs(_atanh), cabs(_msg)*0.5)\
-                            + 0.5*(cln(1+cexp(-cabs(_msg + 2*_atanh))) -\
-                                   cln(1+cexp(-cabs(_msg - 2*_atanh))))
-                        
-                self.__check_to_var[index_set[i]] = prefactor*_atanh
-        return
+            B = F + N_vn - 2
+            # Note that &B[0] == &F[N_nv - 2] (which is the last location "used by" F )
+            # But B[0] is actually never used
+
+            F[0]      = self.__var_to_check[index_set[0]]
+            B[N_vn-1] = self.__var_to_check[index_set[N_vn-1]]
+
+            j=0
+            for i in range(1,N_vn-1):
+                # in this loop j is always i-1
+                _msg = self.__var_to_check[index_set[i]]
+                F[i] = __box_plus(F[j], _msg)
+                j = i
+
+            j = N_vn-1
+            for i in range(N_vn-2, 0, -1):
+                # in this loop, j is always i+1
+                _msg = self.__var_to_check[index_set[i]]
+                B[i] = __box_plus(B[j], _msg)
+                j = i
+            
+            prefactor = -1.0 if self.__synd[node_index] else 1.0
+            self.__check_to_var[index_set[0]] = prefactor*B[1]
+
+            for i in range(1, N_vn-1):
+                self.__check_to_var[index_set[i]] = prefactor * __box_plus(F[i-1], B[i+1])
+
+            self.__check_to_var[index_set[N_vn-1]] = prefactor*F[N_vn-2]
+            
+        free(F)
+        return 0
 
     
-    cpdef void process_check_node(self,
-                                  long node_index,
-                                  unsigned char [:] synd,
-                                  double [:] check_to_var,
-                                  double [:] var_to_check):
+    cpdef int process_check_node(self,
+                                 long node_index,
+                                 unsigned char [:] synd,
+                                 double [:] check_to_var,
+                                 double [:] var_to_check):
+        cdef int res
         self.__check_to_var = check_to_var
         self.__var_to_check = var_to_check
         self.__synd         = synd
 
-        self.__process_check_node(node_index)
+        res = self.__process_check_node(node_index)
 
         self.__check_to_var = None
         self.__var_to_check = None
         self.__synd         = None
             
-        return
+        return res
     
         
-    cpdef tuple decode(self,
-                       double [:] lappr_data,
-                       unsigned char [:] synd,
-                       int max_iterations):
+    cdef decoderResult _decode(self,
+                               double [:] lappr_data,
+                               unsigned char [:] synd,
+                               int max_iterations) nogil:
 
         cdef long iter_index, c, v, e
-        
-        if (self.check_lappr(lappr_data, synd)):
-            return (True, 0, lappr_data)
+        cdef decoderResult res
 
-        #self.__alloc_messages()
-        self.__check_to_var  = np.zeros(self.__edge_num, dtype=np.double)
-        self.__var_to_check  = np.empty_like(self.__check_to_var)
-        self.__updated_lappr = np.empty_like(lappr_data)
-        # self.__check_to_var  = cvarray(shape=(self.__edge_num,), itemsize=sizeof(double), format="i")
-        # self.__var_to_check  = cvarray(shape=(self.__edge_num,), itemsize=sizeof(double), format="i")
-        # self.__updated_lappr = cvarray(shape=(self.__var_num ,), itemsize=sizeof(double), format="i")
+        res.final_lappr_size = self.__var_num
+
+        with cython.boundscheck(False):
+            self.__updated_lappr = &lappr_data[0]
+        self.__synd          = synd
+        if (self.__check_lappr()):
+            self.__updated_lappr = NULL
+            res.success     = 1
+            res.iterations  = 0
+            with cython.boundscheck(False):
+                res.final_lappr = &lappr_data[0]
+            return res
+
+        with gil:
+            self.__check_to_var  = np.zeros(self.__edge_num, dtype=np.double)
+            self.__var_to_check  = np.empty_like(self.__check_to_var)
+
+        # DO NOT FREE HERE: it will be embedded in a numpy array in cpdef tuple decode(...)
+        self.__updated_lappr = <double*>malloc(self.__edge_num*sizeof(double))
+        if self.__updated_lappr is NULL:
+            raise MemoryError("Out of memory: cannot allocate the updated lappr array")
+        res.final_lappr = self.__updated_lappr
+
         self.__lappr_data    = lappr_data
         self.__synd          = synd
 
-        # Initialize __check_to_var to 0
-        for e in range(self.__edge_num):
-            self.__check_to_var[e] = 0
         
         # First half iteration to propagate lapprs to check nodes
         # The following line also initializes var_to_check
-        for v in range(self.__var_num):
+        for v in prange(self.__var_num):
             self.__process_var_node(v)
 
         
         for iter_index in range(max_iterations):
-            for c in range(self.__chk_num):
+            for c in prange(self.__chk_num):
                 self.__process_check_node(c)
                 
-            for v in range(self.__var_num):
+            for v in prange(self.__var_num):
                 self.__process_var_node(v)
                 
             if (self.__check_lappr()):
-                return (True, iter_index+1, self.__updated_lappr)
+                self.__updated_lappr = NULL
+                
+                res.success    = 1
+                res.iterations = iter_index+1
+                
+                return res
 
-        return (False, max_iterations, self.__updated_lappr)
+        self.__updated_lappr = NULL
+        
+        res.success     = 0
+        res.iterations  = max_iterations
+        return res
 
 
     
     
+    cpdef tuple decode(self,
+                       double [:] lappr_data,
+                       unsigned char [:] synd,
+                       int max_iterations):
+        cdef decoderResult res
+        
+        res = self._decode(lappr_data,
+                           synd,
+                           max_iterations)
+        # Unpack result to tuple
+        return (res.success,
+                res.iterations,
+                np.array(<double[:res.final_lappr_size]>res.final_lappr))

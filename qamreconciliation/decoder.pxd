@@ -1,3 +1,10 @@
+cdef struct decoderResult:
+    unsigned char   success
+    int             iterations
+    double        * final_lappr
+    long            final_lappr_size
+    
+
 cdef class Decoder:
     cdef:
         long __chk_num, __var_num, __edge_num
@@ -8,7 +15,7 @@ cdef class Decoder:
         long ** __c_to_v
         
         double [:] __lappr_data
-        double [:] __updated_lappr
+        double  *  __updated_lappr
         double [:] __check_to_var
         double [:] __var_to_check
 
@@ -34,13 +41,13 @@ cdef class Decoder:
 
     cdef unsigned char __check_lappr_node(self, long check_node_index) noexcept nogil
 
-    cdef unsigned char __check_lappr(self) nogil
+    cdef unsigned char __check_lappr(self) noexcept nogil
 
     cpdef unsigned char check_lappr(self,
                                     double [:] lappr,
                                     unsigned char [:] synd)
 
-    cdef void __process_var_node(self, long node_index) nogil
+    cdef void __process_var_node(self, long node_index) noexcept nogil
 
     cpdef void process_var_node(self,
                                 long node_index,
@@ -49,13 +56,18 @@ cdef class Decoder:
                                 double [:] var_to_check,
                                 double [:] updated_lappr)
 
-    cdef void __process_check_node(self, long node_index) nogil
+    cdef int __process_check_node(self, long node_index) noexcept nogil
 
-    cpdef void process_check_node(self,
-                                  long node_index,
-                                  unsigned char [:] synd,
-                                  double [:] check_to_var,
-                                  double [:] var_to_check)
+    cpdef int process_check_node(self,
+                                 long node_index,
+                                 unsigned char [:] synd,
+                                 double [:] check_to_var,
+                                 double [:] var_to_check)
+
+    cdef decoderResult _decode(self,
+                               double [:] lappr_data,
+                               unsigned char [:] synd,
+                               int max_iterations) nogil
 
     cpdef tuple decode(self,
                        double [:] lappr_data,
