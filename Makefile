@@ -4,7 +4,8 @@ NUMPY_INCLUDE_DIR ?=$(HOME)/.local/lib/python3.10/site-packages/numpy/core/inclu
 EXTRA_FLAGS ?=
 OUT_SUFFIX ?= $(shell python3 -c "import distutils; print(distutils.sysconfig.get_config_var('EXT_SUFFIX'))")
 
-PYX_LIST = $(shell find qamreconciliation/ -name "*.pyx" -not -path "**/.ipynb_checkpoints/**" )
+PYX_LIST := $(shell find qamreconciliation/ -name "*.pyx" -not -path "**/.ipynb_checkpoints/**" )
+PYX_LIST := $(PYX_LIST) sims/reconciliation.pyx
 OBJ_LIST = $(PYX_LIST:.pyx=$(OUT_SUFFIX))
 C_LIST = $(PYX_LIST:.pyx=.c)
 

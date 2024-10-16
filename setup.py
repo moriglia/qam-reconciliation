@@ -8,34 +8,54 @@ import sys
 
 all_extensions = {
     "decoder" : Extension(
-        name               = "decoder",
-        sources            = ["qamreconciliation/decoder.pyx"],
-        extra_compile_args = ["-fopenmp"],
-        extra_link_args    = ["-fopenmp"]
+        name               = "qamreconciliation.decoder",
+        sources            = ["qamreconciliation/decoder.pyx"]#,
+        # extra_compile_args = ["-fopenmp"],
+        # extra_link_args    = ["-fopenmp"]
+    ),
+    "decoderv3" : Extension(
+        name               = "qamreconciliation.decoderv3",
+        sources            = ["qamreconciliation/decoderv3.pyx"]#,
+        # extra_compile_args = ["-fopenmp"],
+        # extra_link_args    = ["-fopenmp"]
     ),
     "alphabet" :  Extension(
-        name = "alphabet",
+        name = "qamreconciliation.alphabet",
         sources = ["qamreconciliation/alphabet.pyx"]
     ),
     "noisemapper" : Extension(
-        name = "noisemapper",
+        name = "qamreconciliation.noisemapper",
         sources = ["qamreconciliation/noisemapper.pyx"]
     ),
     "utils" : Extension(
-        name = "utils",
+        name = "qamreconciliation.utils",
         sources = ["qamreconciliation/utils.pyx"]
     ),
     "matrix" : Extension(
-        name = "matrix",
+        name = "qamreconciliation.matrix",
         sources = ["qamreconciliation/matrix.pyx"]
     ),
     "mutual_information" : Extension(
-        name = "mutual_information",
+        name = "qamreconciliation.mutual_information",
         sources = ["qamreconciliation/mutual_information.pyx"]
     ),
     "bicm" : Extension(
-        name = "bicm",
+        name = "qamreconciliation.bicm",
         sources = ["qamreconciliation/bicm.pyx"]
+    ),
+    "reconciliation": Extension(
+        name               = "sims.reconciliation",
+        sources            = ["sims/reconciliation.pyx"],
+        # extra_compile_args = ["-fopenmp"],
+        # extra_link_args    = ["-fopenmp"],
+        include_dirs       = ["",
+                              "qamreconciliation/"]
+    ),
+    "testopenmp": Extension(
+        name               = "sims.testopenmp",
+        sources            = ["sims/testopenmp.pyx"],
+        extra_compile_args = ["-fopenmp"],
+        extra_link_args    = ["-fopenmp"]
     )
 }
 
@@ -57,5 +77,6 @@ else:
     
 setup(
     name = "qamreconciliation",
+    packages=["qamreconciliation", "sims"],
     ext_modules = cythonize(ext_modules, language_level=3)
 )

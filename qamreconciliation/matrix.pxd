@@ -6,6 +6,11 @@ cdef class Matrix:
         int __cnode_num
         int __edge_num
 
+    cdef readonly:
+        int vnum
+        int cnum
+        int ednum
+
     cpdef unsigned char [:] eval_syndrome(
         self,
         unsigned char [:] word

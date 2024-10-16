@@ -16,6 +16,12 @@ cdef class Matrix:
         self.__cnode_num = max(cnode_array) + 1
         self.__vnode_num = max(vnode_array) + 1
 
+        self.vnum = self.__vnode_num
+        self.cnum = self.__cnode_num
+        self.ednum = self.__edge_num
+
+        return
+
     # def __init__(self, edge_data:pd.DataFrame, num_data_first_row:bool=True):
     #     if (num_data_first_row):
     #         self.__edge_df  = edge_data[:][1:]
@@ -28,25 +34,6 @@ cdef class Matrix:
     #         self.__chk_num  = edge_data['cid'].max() + 1
     #         self.__var_num  = edge_data['vid'].max() + 1
     #     return
-
-
-    @property
-    def cnum(self):
-        """ Number of check nodes """
-        return self.__cnode_num
-
-    
-    @property
-    def vnum(self):
-        """ Number of variable nodes """
-        return self.__vnode_num
-
-
-    @property
-    def enum(self):
-        """ Number of edges """
-        return self.__edge_num
-
 
 
     """ Eval syndrome of a given word """

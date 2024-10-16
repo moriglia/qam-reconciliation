@@ -13,6 +13,7 @@ cdef class Decoder:
         long ** __c_to_e
         long ** __v_to_e
         long ** __c_to_v
+        double ** __cnode_buffer_list
         
         double [:] __lappr_data
         double  *  __updated_lappr
@@ -22,10 +23,7 @@ cdef class Decoder:
         unsigned char [:] __synd
         unsigned char [:] __word
 
-    # cdef void __alloc_messages(self)
-
-    # cdef void __free_messages(self)
-        
+    
     cdef unsigned char __check_synd_node(self, long check_node_index) noexcept nogil
 
     cpdef unsigned char check_synd_node(self,
@@ -64,11 +62,12 @@ cdef class Decoder:
                                  double [:] check_to_var,
                                  double [:] var_to_check)
 
-    cdef decoderResult _decode(self,
-                               double [:] lappr_data,
-                               unsigned char [:] synd,
-                               int max_iterations) nogil
-
+    cdef (int, int) _decode(self,
+                            double [:] lappr_data,
+                            unsigned char [:] synd,
+                            int max_iterations,
+                            double [:] final_lappr) noexcept nogil
+    
     cpdef tuple decode(self,
                        double [:] lappr_data,
                        unsigned char [:] synd,
