@@ -333,7 +333,7 @@ cdef class Decoder:
                 F[i] = __box_plus(F[j], self.__var_to_check[index_set[i]])
                 j = i
 
-            # j = N_vn-1
+            j = N_vn-1
             for i in range(N_vn-2, 0, -1):
                 # in this loop, j is always i+1
                 # _msg = self.__var_to_check[index_set[i]]
@@ -343,6 +343,7 @@ cdef class Decoder:
             prefactor = -1.0 if self.__synd[node_index] else 1.0
             self.__check_to_var[index_set[0]] = prefactor*B[1]
 
+            j = 0
             for i in range(1, N_vn-1):
                 # in this loop j is always i-1
                 self.__check_to_var[index_set[i]] = prefactor * __box_plus(F[j], B[i+1])

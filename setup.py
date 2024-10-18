@@ -9,15 +9,7 @@ import sys
 all_extensions = {
     "decoder" : Extension(
         name               = "qamreconciliation.decoder",
-        sources            = ["qamreconciliation/decoder.pyx"]#,
-        # extra_compile_args = ["-fopenmp"],
-        # extra_link_args    = ["-fopenmp"]
-    ),
-    "decoderv3" : Extension(
-        name               = "qamreconciliation.decoderv3",
-        sources            = ["qamreconciliation/decoderv3.pyx"]#,
-        # extra_compile_args = ["-fopenmp"],
-        # extra_link_args    = ["-fopenmp"]
+        sources            = ["qamreconciliation/decoder.pyx"],
     ),
     "alphabet" :  Extension(
         name = "qamreconciliation.alphabet",
@@ -46,16 +38,8 @@ all_extensions = {
     "reconciliation": Extension(
         name               = "sims.reconciliation",
         sources            = ["sims/reconciliation.pyx"],
-        # extra_compile_args = ["-fopenmp"],
-        # extra_link_args    = ["-fopenmp"],
         include_dirs       = ["",
                               "qamreconciliation/"]
-    ),
-    "testopenmp": Extension(
-        name               = "sims.testopenmp",
-        sources            = ["sims/testopenmp.pyx"],
-        extra_compile_args = ["-fopenmp"],
-        extra_link_args    = ["-fopenmp"]
     )
 }
 
