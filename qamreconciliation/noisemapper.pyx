@@ -479,7 +479,7 @@ cdef class NoiseMapper:
             # have decided for that symbol, based on what
             # Alice knows about that sample: its transformed
             # noise estimation is equal to $n$
-            y_hat_i = self.g_inv(n, i)
+            y_hat_i = self.g_inv_search(n, i)
 
 
             # Part II

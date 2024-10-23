@@ -60,11 +60,12 @@ for i in range(len(df)):
 
 plt.semilogy(snrdb_range, p_b, linestyle=":", label="Uncoded error rate")
 plt.grid(True, which="both")
-plt.legend()
+plt.legend(fontsize=18)
 # plt.xlabel("$E_s/N_0$ [dB]")
 # plt.ylabel("Codeword BER $p_b$")
-plt.xlabel(args.xlabel)
-plt.ylabel(args.ylabel)
-plt.title(args.title)
-
+plt.xlabel(args.xlabel, fontsize=20)
+plt.ylabel(args.ylabel, fontsize=20)
+plt.title(args.title, fontsize=22)
+plt.xticks(fontsize=14)
+plt.yticks(fontsize=14)
 plt.show()
