@@ -1,5 +1,7 @@
 # QAM Reconciliation
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.13982982.svg)](https://doi.org/10.5281/zenodo.13982982)
+
 Reverse Reconciliation Softening experimental code.
 
 
