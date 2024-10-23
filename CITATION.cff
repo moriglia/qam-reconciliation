@@ -1,0 +1,9 @@
+cff-version: 1.1.0
+message: "If you use this software, please cite it as below."
+authors:
+- family-names: Marco
+  given-names: Origlia
+orcid: https://orcid.org/0000-0003-4901-4350
+title:moriglia/qam-reconciliation: Reverse Reconciliation Softening for SCC2025
+version: vSCC2025
+date-released: 2024-10-23
