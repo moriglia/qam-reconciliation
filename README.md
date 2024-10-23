@@ -138,3 +138,11 @@ This script outputs a CSV file with the following columns:
 2. "ber" : Bit Error Rate
 3. "fer" : Frame Error Rate
 4. "iters" : average number of iterations to successfully decode a frame
+
+
+## License
+
+Any source file without an explicit license is distributed under version 3 of the GNU General Public License.
+You may share and distribute such code with the same version of the license or, at your option, any later version.
+
+A copy of the license is distributed in the `COPYING` file of the root project.
