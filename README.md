@@ -1,6 +1,8 @@
 # QAM Reconciliation
 
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.13982982.svg)](https://doi.org/10.5281/zenodo.13982982)
+
+[![DOI](https://zenodo.org/badge/792859883.svg)](https://doi.org/10.5281/zenodo.13982981)
+
 
 Reverse Reconciliation Softening experimental code.
 
@@ -79,7 +81,7 @@ word    = pa.demap_symbols_to_bits(x_hat_i)
 
 # Bob generates the softening metric and the syndrome
 n       = nm.map_noise(y, x_hat_i)   ## softening metric
-synd    = mat.evaluate_syndrome(word)
+synd    = mat.eval_syndrome(word)
 
 
 # Alice uses her symbols to build the LLR for Bob's decisions
